@@ -15,4 +15,5 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(fmtlib)
 
 
+add_subdirectory(lib)
 add_subdirectory(arby)
