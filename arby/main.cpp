@@ -3,16 +3,20 @@
 #include <boost/asio.hpp>
 #include <boost/asio/experimental/awaitable_operators.hpp>
 #include <boost/asio/experimental/channel.hpp>
+#include <boost/beast/core.hpp>
 #include <boost/beast/ssl.hpp>
 #include <boost/beast/websocket.hpp>
-#include <boost/beast/core.hpp>
 #include <boost/filesystem.hpp>
+#include <fmt/chrono.h>
 #include <fmt/format.h>
+#include <fmt/ostream.h>
+#include <util/truncate.hpp>
 
 #include <cassert>
 #include <cstdio>
 #include <deque>
 #include <iostream>
+#include <set>
 #include <string>
 
 namespace beast     = boost::beast;
@@ -31,6 +35,97 @@ enum trade_side
     buy,
     sell
 };
+
+struct instance
+{
+    std::string                           name;
+    std::size_t                           version;
+    std::chrono::system_clock::time_point creation_time;
+};
+
+std::ostream &
+operator<<(std::ostream &os, instance const &i)
+{
+    fmt::print(os, "{}:{}:{}", i.name, i.version, i.creation_time);
+    return os;
+}
+
+bool
+operator<(instance const &l, instance const &r)
+{
+    return std::tie(l.name, l.version, l.creation_time) <
+           std::tie(r.name, r.version, r.creation_time);
+}
+
+struct monitor
+{
+    static std::unordered_map< std::string, std::size_t > next_index_;
+    static std::set< instance >                           instances_;
+    using instance_iter = std::set< instance >::iterator;
+
+    struct sentinel
+    {
+        sentinel(instance_iter it)
+        : iter(it)
+        , valid(true)
+        {
+        }
+        sentinel(sentinel &&other)
+        : iter(other.iter)
+        , valid(std::exchange(other.valid, false))
+        {
+        }
+
+        sentinel &
+        operator=(sentinel const &) = delete;
+        ~sentinel()
+        {
+            if (valid)
+                monitor::erase(iter);
+        }
+
+        instance_iter iter;
+        bool          valid;
+    };
+
+    static sentinel
+    record(std::string name)
+    {
+        auto version = next_index_[name]++;
+        auto time    = std::chrono::system_clock::now();
+        auto result  = sentinel(instances_
+                                   .insert(instance { .name = std::move(name),
+                                                       .version       = version,
+                                                       .creation_time = time })
+                                   .first);
+        fmt::print("monitor: create {}\n", *result.iter);
+        return result;
+    }
+
+    static void
+    erase(instance_iter iter)
+    {
+        fmt::print("monitor: destroy {}\n", *iter);
+        instances_.erase(iter);
+    }
+
+    asio::awaitable< void > static mon()
+    {
+        auto timer = asio::steady_timer(co_await asio::this_coro::executor);
+        while (1)
+        {
+            timer.expires_after(std::chrono::seconds(3));
+            co_await timer.async_wait(asio::use_awaitable);
+            fmt::print("monitor::mon:-\n");
+            for (auto &i : instances_)
+            {
+                fmt::print(" - {}\n", i);
+            }
+        }
+    }
+};
+std::unordered_map< std::string, std::size_t > monitor::next_index_;
+std::set< instance >                           monitor::instances_;
 
 namespace power_trade
 {
@@ -73,7 +168,7 @@ struct power_trade_connector
             asio::dispatch(get_executor(),
                            [self = shared_from_this()]
                            {
-                               fmt::print("{}::{}", classname, "stop");
+                               fmt::print("{}::{}\n", classname, "stop");
                                assert(!self->stopped_);
                                self->stopped_ = true;
                                self->stop_.emit(
@@ -98,6 +193,7 @@ struct power_trade_connector
         asio::awaitable< void >
         run(std::shared_ptr< impl > self)
         {
+            auto sentinel = monitor::record("power_trade_connector::run");
             try
             {
                 using asio::use_awaitable;
@@ -123,7 +219,7 @@ struct power_trade_connector
 
                 error_.clear();
                 send_cv_.cancel();
-                co_await(send_loop(ws) && receive_loop(ws));
+                co_await(send_loop(ws) || receive_loop(ws));
             }
             catch (std::exception &e)
             {
@@ -135,6 +231,7 @@ struct power_trade_connector
         asio::awaitable< void >
         send_loop(ws_layer &ws)
         {
+            auto sentinel = monitor::record("power_trade_connector::send_loop");
             using asio::redirect_error;
             using asio::use_awaitable;
 
@@ -153,7 +250,8 @@ struct power_trade_connector
                     if (error_)
                         break;
                     assert(!send_queue_.empty());
-                    fmt::print("{}: sending {}\n", __func__, send_queue_.front());
+                    fmt::print(
+                        "{}: sending {}\n", __func__, send_queue_.front());
                     co_await ws.async_write(asio::buffer(send_queue_.front()),
                                             use_awaitable);
                     send_queue_.pop_front();
@@ -169,6 +267,8 @@ struct power_trade_connector
         asio::awaitable< void >
         receive_loop(ws_layer &ws)
         {
+            auto sentinel =
+                monitor::record("power_trade_connector::receive_loop");
             using asio::redirect_error;
             using asio::use_awaitable;
 
@@ -181,25 +281,19 @@ struct power_trade_connector
                 {
                     auto size = co_await ws.async_read(
                         buf, redirect_error(use_awaitable, ec));
-                    if (ec) {
+                    if (ec)
+                    {
                         fmt::print(
                             "{}: read error: {}\n", __func__, ec.message());
                         break;
                     }
 
-                    auto data = beast::buffers_to_string(buf.data());
-/*
-                    if (data.size() > 1024)
-                    {
-                        data.erase(1021);
-                        data.append("...");
-                    }
-*/
-//                        std::string_view(
-//                        reinterpret_cast< const char * >(seq.data()),
-//                        seq.size());
+                    auto data = std::string_view(
+                        static_cast< char const * >(buf.data().data()),
+                        buf.data().size());
                     fmt::print("{}: {} bytes\n", __func__, size);
-                    fmt::print("{}: message: {}\n", __func__, data);
+                    fmt::print(
+                        "{}: message: {}\n", __func__, util::truncate(data));
                     buf.consume(size);
                 }
 
@@ -217,6 +311,7 @@ struct power_trade_connector
         asio::awaitable< tcp::resolver::results_type >
         resolve()
         {
+            auto sentinel = monitor::record("power_trade_connector::resolve");
             using asio::use_awaitable;
 
             auto resolver = tcp::resolver(co_await asio::this_coro::executor);
@@ -290,13 +385,14 @@ set_up_stdin()
     std::atexit([]()
                 { ::tcsetattr(STDIN_FILENO, TCSANOW, &original_termios); });
 
-//    ::cfmakeraw(&my_termios);
+    //    ::cfmakeraw(&my_termios);
     ::tcsetattr(STDIN_FILENO, TCSANOW, &my_termios);
 }
 
 asio::awaitable< void >
 monitor_quit(asio::cancellation_signal &sig)
 {
+    auto sentinel = monitor::record("monitor_quit");
     using asio::redirect_error;
     using asio::use_awaitable;
 
@@ -325,6 +421,7 @@ monitor_quit(asio::cancellation_signal &sig)
 asio::awaitable< void >
 check(ssl::context &sslctx)
 {
+    auto sentinel = monitor::record("check");
     auto con =
         power_trade_connector(co_await asio::this_coro::executor, sslctx);
 
@@ -345,9 +442,21 @@ check(ssl::context &sslctx)
     co_await monitor_quit(cancel_sig);
 }
 
+asio::awaitable< void >
+watch()
+{
+    using namespace asio::experimental::awaitable_operators;
+
+    auto sigs = asio::signal_set(co_await asio::this_coro::executor, SIGINT);
+    co_await(monitor::mon() || sigs.async_wait(asio::use_awaitable));
+}
+
 int
 main(int argc, char **argv)
 {
+    using asio::co_spawn;
+    using asio::detached;
+
     asio::io_context ioc;
     ssl::context     sslctx(ssl::context_base::tls_client);
 
@@ -356,7 +465,8 @@ main(int argc, char **argv)
 
     try
     {
-        asio::co_spawn(ioc, check(sslctx), asio::detached);
+        co_spawn(ioc, watch(), detached);
+        co_spawn(ioc, check(sslctx), detached);
         ioc.run();
     }
     catch (const std::exception &e)

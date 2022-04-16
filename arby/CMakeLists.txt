@@ -1,4 +1,9 @@
-
-add_executable(arby main.cpp)
-target_link_libraries(arby PUBLIC Boost::system Boost::thread Threads::Threads OpenSSL::SSL OpenSSL::Crypto fmt::fmt Boost::filesystem asioex)
+file(GLOB_RECURSE arby_source_files CONFIGURE_DEPENDS "*.cpp" "*.hpp")
+add_executable(arby ${arby_source_files})
+target_link_libraries(arby PUBLIC
+        Boost::system Boost::thread Boost::filesystem
+        Threads::Threads
+        OpenSSL::SSL OpenSSL::Crypto
+        fmt::fmt
+        Arby::asioex Arby::util)
 add_executable(Arby::arby ALIAS arby)

@@ -1,4 +1,5 @@
 #file(GLOB_RECURSE asioex_srcs CONFIGURE_DEPENDS "*.hpp" "*.cpp")
-add_library(asioex INTERFACE)
-message(STATUS "lib_source_root=${lib_source_root}")
-target_include_directories(asioex INTERFACE ${lib_source_root})
+add_library(arby_asioex INTERFACE)
+add_library(Arby::asioex ALIAS arby_asioex)
+set_property(TARGET arby_asioex PROPERTY EXPORT_NAME asioex)
+target_include_directories(arby_asioex INTERFACE ${lib_source_root})
