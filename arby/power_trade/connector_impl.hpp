@@ -49,9 +49,15 @@ struct connector_impl : std::enable_shared_from_this< connector_impl >
     void
     send(std::string s);
 
+    void
+    interrupt();
+
   private:
     asio::awaitable< void >
     run(std::shared_ptr< connector_impl > self);
+
+    asio::awaitable< void >
+    run_connection();
 
     asio::awaitable< void >
     send_loop(ws_stream &ws);
@@ -74,6 +80,7 @@ struct connector_impl : std::enable_shared_from_this< connector_impl >
     sys::error_code           error_ = asio::error::not_connected;
     std::deque< std::string > send_queue_;
     asio::steady_timer        send_cv_ { get_executor() };
+    asio::cancellation_signal interrupt_connection_;
     asio::cancellation_signal stop_;
     bool                      stopped_ = false;
 };

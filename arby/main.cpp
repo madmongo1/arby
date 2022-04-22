@@ -55,7 +55,7 @@ set_up_stdin()
 }
 
 asio::awaitable< void >
-monitor_quit(asio::cancellation_signal &sig)
+monitor_quit(asio::cancellation_signal &sig, power_trade::connector &conn)
 {
     auto sentinel = util::monitor::record("monitor_quit");
     using asio::redirect_error;
@@ -76,7 +76,15 @@ monitor_quit(asio::cancellation_signal &sig)
         if (ec)
             break;
         if (size && buf == 'q')
+        {
+            fmt::print("quitting\n");
             break;
+        }
+        if (size && buf == 'i')
+        {
+            fmt::print("interrupting\n");
+            conn.interrupt();
+        }
     }
 
     sig.emit(asio::cancellation_type::all);
@@ -105,7 +113,7 @@ check(ssl::context &sslctx)
     con.send(req);
 */
     asio::cancellation_signal cancel_sig;
-    co_await monitor_quit(cancel_sig);
+    co_await monitor_quit(cancel_sig, con);
 }
 
 asio::awaitable< void >

@@ -12,14 +12,14 @@
 #include "util/monitor.hpp"
 #include "util/truncate.hpp"
 
-#include <fmt/format.h>
+#include <boost/scope_exit.hpp>
 #include <fmt/chrono.h>
+#include <fmt/format.h>
 #include <fmt/ostream.h>
 
 namespace arby::power_trade
 {
-connector_impl::connector_impl(executor_type exec,
-                               ssl::context                   &sslctx)
+connector_impl::connector_impl(executor_type exec, ssl::context &sslctx)
 : exec_(exec)
 , ssl_ctx_(sslctx)
 {
@@ -52,16 +52,42 @@ connector_impl::send(std::string s)
     send_cv_.cancel();
 }
 
+void
+connector_impl::interrupt()
+{
+    interrupt_connection_.emit(asio::cancellation_type::all);
+}
+
 asio::awaitable< void >
 connector_impl::run(std::shared_ptr< connector_impl > self)
 {
     auto sentinel = util::monitor::record("power_trade_connector::run");
+
+    while (!this->stopped_)
+    {
+        try
+        {
+            co_await run_connection();
+        }
+        catch (std::exception &e)
+        {
+            fmt::print(
+                "{}::{} : exception : {}", classname, __func__, e.what());
+        }
+    }
+}
+
+asio::awaitable< void >
+connector_impl::run_connection()
+{
+    auto sentinel =
+        util::monitor::record("power_trade_connector::run_connection");
     try
     {
         using asio::use_awaitable;
         using namespace asio::experimental::awaitable_operators;
 
-        auto ws = ws_stream(self->get_executor(), self->ssl_ctx_);
+        auto ws = ws_stream(get_executor(), ssl_ctx_);
 
         auto &ssl_stream = ws.next_layer();
         auto &sock       = ssl_stream.next_layer();
@@ -73,6 +99,17 @@ connector_impl::run(std::shared_ptr< connector_impl > self)
             throw sys::system_error(ERR_get_error(),
                                     asio::error::get_ssl_category());
 
+        interrupt_connection_.slot().assign(
+            [&](asio::cancellation_type)
+            {
+                sock.shutdown(tcp::socket::shutdown_both);
+                sock.close();
+            });
+        BOOST_SCOPE_EXIT_ALL(&)
+        {
+            interrupt_connection_.slot().clear();
+        };
+
         co_await ssl_stream.async_handshake(ssl::stream_base::client,
                                             use_awaitable);
 
@@ -82,8 +119,14 @@ connector_impl::run(std::shared_ptr< connector_impl > self)
         send_cv_.cancel();
         co_await (send_loop(ws) || receive_loop(ws));
     }
+    catch (boost::system::system_error &se)
+    {
+        error_ = se.code();
+        fmt::print("{}: exception: {}\n", __func__, se.what());
+    }
     catch (std::exception &e)
     {
+        error_ = asio::error::basic_errors::no_such_device;
         fmt::print("{}: exception: {}\n", __func__, e.what());
     }
     fmt::print("{}: complete\n", __func__);

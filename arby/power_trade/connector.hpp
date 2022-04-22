@@ -50,6 +50,13 @@ namespace power_trade
                            { impl->send(std::move(s)); });
         }
 
+        void
+        interrupt()
+        {
+            asio::dispatch(impl_->get_executor(),
+                           [impl = impl_] { impl->interrupt(); });
+        }
+
         std::shared_ptr< connector_impl > impl_;
     };
 
