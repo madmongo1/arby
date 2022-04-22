@@ -1,5 +1,6 @@
 file(GLOB_RECURSE arby_source_files CONFIGURE_DEPENDS "*.cpp" "*.hpp")
 add_executable(arby ${arby_source_files})
+target_include_directories(arby PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(arby PUBLIC
         Boost::system Boost::thread Boost::filesystem
         Threads::Threads

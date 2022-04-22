@@ -2,7 +2,7 @@
 
 #include <cassert>
 
-namespace util
+namespace arby::util
 {
 
 string_list::handle::handle(string_list *host, node *pnode)

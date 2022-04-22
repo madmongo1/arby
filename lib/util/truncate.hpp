@@ -4,7 +4,7 @@
 #include <string_view>
 #include <utility>
 
-namespace util
+namespace arby::util
 {
 
 struct string_list
