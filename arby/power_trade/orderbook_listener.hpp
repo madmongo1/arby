@@ -11,6 +11,7 @@
 #define ARBY_ARBY_POWER_TRADE_ORDERBOOK_LISTENER_HPP
 
 #include "power_trade/connector.hpp"
+#include "power_trade/order_book.hpp"
 
 #include <boost/variant2.hpp>
 
@@ -88,25 +89,32 @@ namespace power_trade
                                  std::shared_ptr< json::object const > payload);
 
         static void
+        _handle_message(std::weak_ptr< orderbook_listener > weak,
+                        message const                       message);
+        void
+        handle_message(message payload);
+
+        static void
         _handle_snapshot(std::weak_ptr< orderbook_listener >   weak,
                          std::shared_ptr< json::object const > payload);
 
-        void
-        handle_snapshot(std::shared_ptr< json::object const > payload);
-
         static void
         _handle_add(std::weak_ptr< orderbook_listener >   weak,
-                         std::shared_ptr< json::object const > payload);
-
-        void
-        handle_add(std::shared_ptr< json::object const > payload);
+                    std::shared_ptr< json::object const > payload);
 
         static void
         _handle_remove(std::weak_ptr< orderbook_listener >   weak,
-                         std::shared_ptr< json::object const > payload);
+                       std::shared_ptr< json::object const > payload);
 
-        void
-        handle_remove(std::shared_ptr< json::object const > payload);
+        std::array< std::tuple< json::string, json::string >, 2 >
+        make_message_filter() const
+        {
+            auto result =
+                std::array< std::tuple< json::string, json::string >, 2 > {
+                    { { "symbol", symbol_ }, { "market_id", "0" } }
+                };
+            return result;
+        }
 
         json::string const symbol_;
         json::string const my_subscribe_id_ = build_subscribe_id();
@@ -123,6 +131,9 @@ namespace power_trade
         asio::experimental::channel< void(error_code, message) > msg_channel_ {
             get_executor()
         };
+
+        order_book order_book_;
+
     };
 
 }   // namespace power_trade

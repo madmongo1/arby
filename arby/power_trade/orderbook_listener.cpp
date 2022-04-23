@@ -32,6 +32,7 @@ namespace power_trade
         }
         else
         {
+            order_book_.reset();
             auto req =
                 json::value({ { "subscribe",
                                 { { "market_id", "0" },
@@ -70,6 +71,39 @@ namespace power_trade
         asio::co_spawn(get_executor(), run(shared_from_this()), asio::detached);
     }
 
+    namespace
+    {
+        template < class F, class Filter >
+        struct filter_message
+        {
+            filter_message(F next, Filter filters)
+            : next(std::move(next))
+            , filters(std::move(filters))
+            {
+            }
+
+            void
+            operator()(std::shared_ptr< json::object const > payload) const
+            {
+                for (auto &[k, v] : filters)
+                {
+                    auto pv = payload->if_contains(k);
+                    if (!pv)
+                        return;
+                    auto ps = pv->if_string();
+                    if (!ps)
+                        return;
+                    if (*ps != v)
+                        return;
+                }
+                next(payload);
+            }
+            Filter filters;
+            F      next;
+        };
+
+    }   // namespace
+
     asio::awaitable< void >
     orderbook_listener::run(std::shared_ptr< orderbook_listener > self)
     {
@@ -92,21 +126,22 @@ namespace power_trade
 
         snapshot_conn_ = co_await connector_->watch_messages(
             "snapshot",
-            std::bind(&orderbook_listener::_handle_snapshot,
+            filter_message(std::bind(&orderbook_listener::_handle_snapshot,
                       weak_from_this(),
-                      std::placeholders::_1));
+                      std::placeholders::_1), make_message_filter()));
 
         remove_conn_ = co_await connector_->watch_messages(
             "order_deleted",
-            std::bind(&orderbook_listener::_handle_remove,
-                      weak_from_this(),
-                      std::placeholders::_1));
+            filter_message(std::bind(&orderbook_listener::_handle_remove,
+                                     weak_from_this(),
+                                     std::placeholders::_1),
+                           make_message_filter()));
 
         add_conn_ = co_await connector_->watch_messages(
             "order_added",
-            std::bind(&orderbook_listener::_handle_add,
+            filter_message(std::bind(&orderbook_listener::_handle_add,
                       weak_from_this(),
-                      std::placeholders::_1));
+                      std::placeholders::_1), make_message_filter()));
 
         connection_state_conn_ = std::move(conn);
         on_connection_state(connstate);
@@ -140,9 +175,9 @@ namespace power_trade
     }
 
     void
-    orderbook_listener::_handle_snapshot(
-        std::weak_ptr< orderbook_listener >   weak,
-        std::shared_ptr< json::object const > payload)
+    orderbook_listener::_handle_message(
+        std::weak_ptr< orderbook_listener > weak,
+        message                             msg)
     {
         /*
         fmt::print("{}::{}({})\n",
@@ -153,21 +188,34 @@ namespace power_trade
         if (auto self = weak.lock())
             asio::post(asio::bind_executor(
                 self->get_executor(),
-                std::bind(
-                    &orderbook_listener::handle_snapshot, self, payload)));
+                std::bind(&orderbook_listener::handle_message,
+                          self,
+                          std::move(msg))));
     }
 
     void
-    orderbook_listener::handle_snapshot(
-        std::shared_ptr< json::object const > payload)
+    orderbook_listener::handle_message(message msg)
     {
-        auto msg = orderbook_snapshot { .payload = payload };
         if (!msg_channel_.try_send(error_code(), std::move(msg)))
         {
             msg_channel_.async_send(error_code(),
                                     std::move(msg),
                                     [self = shared_from_this()](error_code) {});
         }
+    }
+
+    void
+    orderbook_listener::_handle_snapshot(
+        std::weak_ptr< orderbook_listener >   weak,
+        std::shared_ptr< json::object const > payload)
+    {
+        /*
+        fmt::print("{}::{}({})\n",
+                   classname,
+                   __func__,
+                   util::truncate(json::serialize(*payload)));
+                   */
+        _handle_message(weak, orderbook_snapshot { .payload = payload });
     }
 
     void
@@ -181,23 +229,7 @@ namespace power_trade
                    __func__,
                    util::truncate(json::serialize(*payload)));
                    */
-        if (auto self = weak.lock())
-            asio::post(asio::bind_executor(
-                self->get_executor(),
-                std::bind(&orderbook_listener::handle_add, self, payload)));
-    }
-
-    void
-    orderbook_listener::handle_add(
-        std::shared_ptr< json::object const > payload)
-    {
-        auto msg = orderbook_add { .payload = payload };
-        if (!msg_channel_.try_send(error_code(), std::move(msg)))
-        {
-            msg_channel_.async_send(error_code(),
-                                    std::move(msg),
-                                    [self = shared_from_this()](error_code) {});
-        }
+        _handle_message(weak, orderbook_add { .payload = payload });
     }
 
     void
@@ -211,23 +243,7 @@ namespace power_trade
                    __func__,
                    util::truncate(json::serialize(*payload)));
                    */
-        if (auto self = weak.lock())
-            asio::post(asio::bind_executor(
-                self->get_executor(),
-                std::bind(&orderbook_listener::handle_remove, self, payload)));
-    }
-
-    void
-    orderbook_listener::handle_remove(
-        std::shared_ptr< json::object const > payload)
-    {
-        auto msg = orderbook_remove { .payload = payload };
-        if (!msg_channel_.try_send(error_code(), std::move(msg)))
-        {
-            msg_channel_.async_send(error_code(),
-                                    std::move(msg),
-                                    [self = shared_from_this()](error_code) {});
-        }
+        _handle_message(weak, orderbook_remove { .payload = payload });
     }
 
     json::string
@@ -269,6 +285,8 @@ namespace power_trade
     {
         using asio::use_awaitable;
 
+        auto last_update = std::chrono::system_clock::time_point::min();
+
         auto sentinel = util::monitor::record(
             fmt::format("{}[{}]::{}", classname, symbol_, __func__));
 
@@ -297,6 +315,17 @@ namespace power_trade
                 if (err.failed())
                     throw system_error(err);
             } while (received);
+
+            if (order_book_.last_update_ > last_update)
+            {
+                last_update = order_book_.last_update_;
+                fmt::print("{}[{}]::{} orderbook:\n{}\n",
+                           classname,
+                           symbol_,
+                           __func__,
+                           order_book_);
+            }
+
             auto which = co_await msg_channel_.async_receive(use_awaitable);
             actual_op(which);
         }
@@ -309,6 +338,32 @@ namespace power_trade
                    classname,
                    __func__,
                    util::truncate(json::serialize(payload)));
+
+        auto timestamp = std::chrono::system_clock::time_point(
+            std::chrono::microseconds(::atol(
+                payload.at("server_utc_timestamp").as_string().c_str())));
+
+        auto &buys = payload.at("buy").as_array();
+        for (auto &v : buys)
+        {
+            auto &obuy = v.as_object();
+            order_book_.add(obuy.at("orderid").as_string(),
+                            price_type(obuy.at("price").as_string().c_str()),
+                            qty_type(obuy.at("quantity").as_string().c_str()),
+                            buy,
+                            timestamp);
+        }
+
+        auto &sells = payload.at("sell").as_array();
+        for (auto &v : sells)
+        {
+            auto &osell = v.as_object();
+            order_book_.add(osell.at("orderid").as_string(),
+                            price_type(osell.at("price").as_string().c_str()),
+                            qty_type(osell.at("quantity").as_string().c_str()),
+                            sell,
+                            timestamp);
+        }
     }
     void
     orderbook_listener::on_add(json::object const &payload)
@@ -317,6 +372,21 @@ namespace power_trade
                    classname,
                    __func__,
                    util::truncate(json::serialize(payload)));
+
+        auto side =
+            wise_enum::from_string< side_type >(payload.at("side").as_string());
+        auto qty   = qty_type(payload.at("quantity").as_string().c_str());
+        auto price = price_type(payload.at("price").as_string().c_str());
+        auto tsval =
+            ::atoll(payload.at("server_utc_timestamp").as_string().c_str());
+
+        auto timestamp = std::chrono::system_clock::time_point(
+            std::chrono::microseconds(tsval));
+        order_book_.add(payload.at("order_id").as_string(),
+                        price,
+                        qty,
+                        side.value(),
+                        timestamp);
     }
     void
     orderbook_listener::on_remove(json::object const &payload)
@@ -325,6 +395,13 @@ namespace power_trade
                    classname,
                    __func__,
                    util::truncate(json::serialize(payload)));
+        auto side =
+            wise_enum::from_string< side_type >(payload.at("side").as_string());
+        auto timestamp = std::chrono::system_clock::time_point(
+            std::chrono::microseconds(::atoll(
+                payload.at("server_utc_timestamp").as_string().c_str())));
+        order_book_.remove(
+            payload.at("order_id").as_string(), side.value(), timestamp);
     }
 
 }   // namespace power_trade

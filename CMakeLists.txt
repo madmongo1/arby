@@ -14,6 +14,20 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(fmtlib)
 
+FetchContent_Declare(
+  wise_enum_dep
+  GIT_REPOSITORY https://github.com/quicknir/wise_enum.git
+  GIT_TAG        master
+)
+#FetchContent_MakeAvailable(wise_enum_dep)
+
+if(NOT wise_enum_dep_POPULATED)
+    FetchContent_Populate(wise_enum_dep)
+    add_subdirectory(${wise_enum_dep_SOURCE_DIR})
+    target_include_directories(wise_enum INTERFACE "$<BUILD_INTERFACE:${wise_enum_dep_SOURCE_DIR}>")
+endif()
+
+
 
 add_subdirectory(lib)
 add_subdirectory(arby)

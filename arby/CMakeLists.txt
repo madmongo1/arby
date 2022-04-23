@@ -6,5 +6,5 @@ target_link_libraries(arby PUBLIC
         Threads::Threads
         OpenSSL::SSL OpenSSL::Crypto
         fmt::fmt
-        Arby::asioex Arby::util Arby::network)
+        Arby::asioex Arby::util Arby::network Arby::config)
 add_executable(Arby::arby ALIAS arby)
