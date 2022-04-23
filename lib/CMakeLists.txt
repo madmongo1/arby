@@ -1,3 +1,5 @@
 set(lib_source_root ${CMAKE_CURRENT_SOURCE_DIR})
+add_subdirectory(config)
 add_subdirectory(asioex)
 add_subdirectory(util)
+add_subdirectory(network)

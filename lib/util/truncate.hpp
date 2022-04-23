@@ -1,3 +1,5 @@
+#include <boost/utility/string_view_fwd.hpp>
+
 #include <list>
 #include <new>
 #include <string>
@@ -58,10 +60,9 @@ struct truncate_op;
 struct truncate_op_base
 {
     std::string_view
-    transform(std::string_view sv) const;
+    transform(std::string_view sv, std::size_t limit) const;
 
   private:
-    static constexpr std::size_t    max_ = 132;
     mutable string_list::handle     handle { nullptr, nullptr };
     thread_local static string_list buffers_;
 };
@@ -69,7 +70,7 @@ struct truncate_op_base
 template <>
 struct truncate_op< std::string_view > : truncate_op_base
 {
-    truncate_op(std::string_view sv);
+    truncate_op(std::string_view sv, std::size_t limit);
 
     friend std::ostream &
     operator<<(std::ostream &os, truncate_op const &op);
@@ -79,6 +80,12 @@ struct truncate_op< std::string_view > : truncate_op_base
 };
 
 truncate_op< std::string_view >
-truncate(std::string_view sv);
+truncate(std::string_view sv, std::size_t limit = 256);
 
-}   // namespace util
+truncate_op< std::string_view >
+truncate(std::string const &s, std::size_t limit = 256);
+
+truncate_op< std::string_view >
+truncate(boost::string_view sv, std::size_t limit = 256);
+
+}   // namespace arby::util

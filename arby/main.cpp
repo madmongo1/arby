@@ -1,6 +1,7 @@
 #include "asioex/async_semaphore.hpp"
 #include "config/websocket.hpp"
 #include "power_trade/connector.hpp"
+#include "power_trade/event_listener.hpp"
 #include "util/monitor.hpp"
 
 #include <boost/asio.hpp>
@@ -95,10 +96,11 @@ asio::awaitable< void >
 check(ssl::context &sslctx)
 {
     auto sentinel = util::monitor::record("check");
-    auto con =
-        power_trade::connector(co_await asio::this_coro::executor, sslctx);
+    auto con      = std::make_shared< power_trade::connector >(
+        co_await asio::this_coro::executor, sslctx);
 
-    /*
+    auto watch1 = power_trade::event_listener::create(con, "heartbeat");
+
     const static char req[] = R"json(
 {
     "subscribe":
@@ -110,10 +112,11 @@ check(ssl::context &sslctx)
         "user_tag":"another_anything_unique"
     }
 })json";
-    con.send(req);
-*/
+    con->send(req);
+    con->send(req);
+
     asio::cancellation_signal cancel_sig;
-    co_await monitor_quit(cancel_sig, con);
+    co_await monitor_quit(cancel_sig, *con);
 }
 
 asio::awaitable< void >

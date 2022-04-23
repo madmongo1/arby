@@ -1,5 +1,8 @@
 #include "util/truncate.hpp"
 
+#include <boost/utility/string_view.hpp>
+
+#include <utility>
 #include <cassert>
 
 namespace arby::util
@@ -76,13 +79,14 @@ string_list::pop()
 string_list thread_local truncate_op_base::buffers_;
 
 std::string_view
-truncate_op_base::transform(std::string_view sv) const
+truncate_op_base::transform(std::string_view sv, std::size_t limit) const
 {
-    if (!handle.pnode && sv.size() > max_)
+    limit = (std::max)(limit, std::size_t(32));
+    if (!handle.pnode && sv.size() > limit)
     {
         handle = buffers_.pop();
         auto s = &(handle.pnode->s);
-        s->assign(sv.data(), sv.data() + max_ - 3);
+        s->assign(sv.data(), sv.data() + limit - 3);
         s->append(3, '.');
     }
     if (handle.pnode)
@@ -93,9 +97,10 @@ truncate_op_base::transform(std::string_view sv) const
     return sv;
 }
 
-truncate_op< std::string_view >::truncate_op(std::string_view sv)
+truncate_op< std::string_view >::truncate_op(std::string_view sv,
+                                             std::size_t      limit)
 : truncate_op_base()
-, sv_(transform(sv))
+, sv_(transform(sv, limit))
 {
 }
 
@@ -107,9 +112,22 @@ operator<<(std::ostream &os, truncate_op< std::string_view > const &op)
 }
 
 truncate_op< std::string_view >
-truncate(std::string_view sv)
+truncate(std::string_view sv, std::size_t limit)
 {
-    return truncate_op< std::string_view >(sv);
+    return truncate_op< std::string_view >(sv, limit);
 }
 
-}   // namespace util
+truncate_op< std::string_view >
+truncate(std::string const &s, std::size_t limit)
+{
+    return truncate_op< std::string_view >(std::string_view(s), limit);
+}
+
+truncate_op< std::string_view >
+truncate(boost::string_view sv, std::size_t limit)
+{
+    return truncate_op< std::string_view >(
+        std::string_view(sv.data(), sv.size()), limit);
+}
+
+}   // namespace arby::util

@@ -57,6 +57,19 @@ namespace power_trade
                            [impl = impl_] { impl->interrupt(); });
         }
 
+        connector_impl &
+        get_implementation()
+        {
+            return *impl_;
+        }
+
+        connector_impl const &
+        get_implementation() const
+        {
+            return *impl_;
+        }
+
+      private:
         std::shared_ptr< connector_impl > impl_;
     };
 
