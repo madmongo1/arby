@@ -37,6 +37,20 @@ namespace power_trade
     void
     event_listener::start(json::string const &primary)
     {
+        connection_state current_state;
+        status_connection_ =
+            connector_->get_implementation().watch_connection_state(
+                current_state,
+                connector_impl::connection_state_slot(
+                    [weak = weak_from_this()](connection_state stat)
+                    {
+                        if (auto self = weak.lock())
+                            asio::post(asio::bind_executor(
+                                self->get_executor(),
+                                [self, stat]
+                                { self->on_connection_state(stat); }));
+                    }));
+
         message_connection_ = connector_->get_implementation().watch_messages(
             primary,
             connector_impl::message_slot(
@@ -48,6 +62,8 @@ namespace power_trade
                             self->get_executor(),
                             [self, pmessage] { self->on_message(pmessage); }));
                 }));
+
+        on_connection_state(current_state);
     }
 
     void
@@ -57,6 +73,12 @@ namespace power_trade
         fmt::print("event_listener::{} - {}\n",
                    __func__,
                    util::truncate(json::serialize(*pmessage), 1024));
+    }
+
+    void
+    event_listener::on_connection_state(connection_state stat)
+    {
+        fmt::print("event_listener::{} - {}\n", __func__, stat);
     }
 
 }   // namespace power_trade

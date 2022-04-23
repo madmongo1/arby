@@ -24,7 +24,7 @@ namespace arby::power_trade
 using namespace std::literals;
 
 connector_impl::connector_impl(executor_type exec, ssl::context &sslctx)
-: exec_(exec)
+: util::has_executor_base(std::move(exec))
 , ssl_ctx_(sslctx)
 {
 }
@@ -105,7 +105,7 @@ connector_impl::run_connection()
 
         fmt::print("{}::{} : websocket connected!\n", classname, __func__);
 
-        error_.clear();
+        set_connection_state(error_code());
         send_cv_.cancel();
 
         auto forward_signal = asio::cancellation_signal();
@@ -115,6 +115,7 @@ connector_impl::run_connection()
             [&](asio::cancellation_type type)
             {
                 fmt::print("{}::run_connection : stopped!\n", classname);
+                ws.next_layer().next_layer().close();
                 forward_signal.emit(type);
             });
         BOOST_SCOPE_EXIT_ALL(&)
@@ -127,6 +128,7 @@ connector_impl::run_connection()
             [&](asio::cancellation_type type)
             {
                 fmt::print("{}::run_connection : interrupted!\n", classname);
+                ws.next_layer().next_layer().close();
                 forward_signal.emit(type);
             });
         BOOST_SCOPE_EXIT_ALL(&)
@@ -138,15 +140,17 @@ connector_impl::run_connection()
             get_executor(),
             send_loop(ws) || receive_loop(ws),
             bind_cancellation_slot(forward_signal.slot(), use_awaitable));
+
+        set_connection_state(asio::error::not_connected);
     }
     catch (boost::system::system_error &se)
     {
-        error_ = se.code();
+        set_connection_state(se.code());
         fmt::print("{}: exception: {}\n", __func__, se.what());
     }
     catch (std::exception &e)
     {
-        error_ = asio::error::basic_errors::no_such_device;
+        set_connection_state(asio::error::no_such_device);
         fmt::print("{}: exception: {}\n", __func__, e.what());
     }
     fmt::print("{}: complete\n", __func__);
@@ -205,13 +209,13 @@ connector_impl::send_loop(ws_stream &ws)
     {
         for (;;)
         {
-            while (!error_ && send_queue_.empty())
+            while (connstate_.up() && send_queue_.empty())
             {
                 send_cv_.expires_at(asio::steady_timer::time_point::max());
                 error_code ec;
                 co_await send_cv_.async_wait(redirect_error(use_awaitable, ec));
             }
-            if (error_)
+            if (connstate_.down())
                 break;
             assert(!send_queue_.empty());
             fmt::print("{}: sending {}\n", __func__, send_queue_.front());
@@ -271,8 +275,8 @@ connector_impl::receive_loop(ws_stream &ws)
             }
         }
 
-        if (!error_)
-            error_ = ec;
+        if (connstate_.up())
+            set_connection_state(ec);
         send_cv_.cancel();
     }
     catch (std::exception &e)
@@ -329,4 +333,25 @@ connector_impl::watch_messages(json::string message_type, message_slot slot)
     return sig.connect(std::move(slot));
 }
 
+boost::signals2::connection
+connector_impl::watch_connection_state(connection_state     &current,
+                                       connection_state_slot slot)
+{
+    current = connstate_;
+    return connstate_signal_.connect(std::move(slot));
+}
+void
+connector_impl::set_connection_state(error_code ec)
+{
+    connstate_.set(ec);
+    connstate_signal_(connstate_);
+}
+
+std::ostream &
+operator<<(std::ostream &os, const connection_state &cstate)
+{
+    if (cstate.up())
+        return os << "up";
+    return os << "down (" << cstate.ec_.message() << ')';
+}
 }   // namespace arby::power_trade

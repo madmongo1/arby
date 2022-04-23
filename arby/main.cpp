@@ -2,6 +2,7 @@
 #include "config/websocket.hpp"
 #include "power_trade/connector.hpp"
 #include "power_trade/event_listener.hpp"
+#include "power_trade/orderbook_listener.hpp"
 #include "util/monitor.hpp"
 
 #include <boost/asio.hpp>
@@ -95,12 +96,16 @@ monitor_quit(asio::cancellation_signal &sig, power_trade::connector &conn)
 asio::awaitable< void >
 check(ssl::context &sslctx)
 {
+    auto this_exec = co_await asio::this_coro::executor;
+
     auto sentinel = util::monitor::record("check");
-    auto con      = std::make_shared< power_trade::connector >(
-        co_await asio::this_coro::executor, sslctx);
+    auto con = std::make_shared< power_trade::connector >(this_exec, sslctx);
 
     auto watch1 = power_trade::event_listener::create(con, "heartbeat");
+    auto watch2 =
+        power_trade::orderbook_listener::create(this_exec, con, "ETH-USD");
 
+    /*
     const static char req[] = R"json(
 {
     "subscribe":
@@ -113,7 +118,7 @@ check(ssl::context &sslctx)
     }
 })json";
     con->send(req);
-    con->send(req);
+*/
 
     asio::cancellation_signal cancel_sig;
     co_await monitor_quit(cancel_sig, *con);

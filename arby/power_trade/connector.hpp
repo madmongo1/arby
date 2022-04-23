@@ -20,6 +20,10 @@ namespace power_trade
     {
         static constexpr char classname[] = "power_trade::connector";
 
+        using impl_type             = connector_impl;
+        using message_slot          = impl_type::message_slot;
+        using connection_state_slot = impl_type::connection_state_slot;
+
         connector(asio::any_io_executor exec, ssl::context &ioc);
 
         ~connector()
@@ -68,6 +72,25 @@ namespace power_trade
         {
             return *impl_;
         }
+
+        /// @brief Await the subscription to a message subscrption.
+        ///
+        /// This allows coroutines running on different executors to build
+        /// subscriptions to messages.
+        /// @note the owner of the subscription must schedule the disconnect
+        /// through this object's interface to ensure that the disconnection
+        /// takes place on the correct executor.
+        /// @note the slot will be executed on the internal execiutof of this
+        /// object's implementation. The slot implementation should be careful
+        /// to marshal execution to its own executor if different.
+        /// @param type
+        /// @return
+        asio::awaitable< util::cross_executor_connection >
+        watch_messages(json::string type, message_slot slot);
+
+        asio::awaitable<
+            std::tuple< util::cross_executor_connection, connection_state > >
+        watch_connection_state(connection_state_slot slot);
 
       private:
         std::shared_ptr< connector_impl > impl_;

@@ -45,10 +45,14 @@ namespace power_trade
 
       private:
         void
+        on_connection_state(connection_state stat);
+
+        void
         on_message(std::shared_ptr< json::object const > const &pmessage);
 
       private:
         std::shared_ptr< connector >       connector_;
+        boost::signals2::scoped_connection status_connection_;
         boost::signals2::scoped_connection message_connection_;
     };
 
