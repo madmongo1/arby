@@ -6,4 +6,4 @@ target_include_directories(arby_asioex INTERFACE ${lib_source_root})
 target_link_libraries(arby_asioex INTERFACE
         Boost::system Boost::thread
         Threads::Threads
-        OpenSSL::SSL OpenSSL::Crypto)
+        OpenSSL::SSL OpenSSL::Crypto Arby::config)

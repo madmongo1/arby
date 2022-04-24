@@ -4,7 +4,7 @@
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 //
-// Official repository: https://github.com/madmongo1/router
+// Official repository: https://github.com/madmongo1/arby
 //
 
 #include "connector.hpp"
@@ -30,27 +30,20 @@ namespace power_trade
 
         if (this_exec == my_exec)
         {
-            co_return util::cross_executor_connection {
-                impl_, impl_->watch_messages(std::move(type), std::move(slot))
-            };
+            co_return util::cross_executor_connection { impl_, impl_->watch_messages(std::move(type), std::move(slot)) };
         }
         else
         {
             co_return co_await co_spawn(
                 my_exec,
-                [&]() -> asio::awaitable< util::cross_executor_connection >
-                {
-                    co_return util::cross_executor_connection {
-                        impl_,
-                        impl_->watch_messages(std::move(type), std::move(slot))
-                    };
+                [&]() -> asio::awaitable< util::cross_executor_connection > {
+                    co_return util::cross_executor_connection { impl_, impl_->watch_messages(std::move(type), std::move(slot)) };
                 },
                 use_awaitable);
         }
     }
 
-    asio::awaitable<
-        std::tuple< util::cross_executor_connection, connection_state > >
+    asio::awaitable< std::tuple< util::cross_executor_connection, connection_state > >
     connector::watch_connection_state(connection_state_slot slot)
     {
         using asio::co_spawn;
@@ -64,22 +57,17 @@ namespace power_trade
         if (this_exec == my_exec)
         {
             auto conn = impl_->watch_connection_state(current, std::move(slot));
-            co_return std::make_tuple(
-                util::cross_executor_connection(impl_, conn), current);
+            co_return std::make_tuple(util::cross_executor_connection(impl_, conn), current);
         }
         else
         {
             co_return co_await co_spawn(
                 my_exec,
-                [&]() -> asio::awaitable<
-                          std::tuple< util::cross_executor_connection,
-                                      connection_state > >
+                [&]() -> asio::awaitable< std::tuple< util::cross_executor_connection, connection_state > >
 
                 {
-                    auto conn =
-                        impl_->watch_connection_state(current, std::move(slot));
-                    co_return std::make_tuple(
-                        util::cross_executor_connection(impl_, conn), current);
+                    auto conn = impl_->watch_connection_state(current, std::move(slot));
+                    co_return std::make_tuple(util::cross_executor_connection(impl_, conn), current);
                 },
                 use_awaitable);
         }

@@ -4,7 +4,7 @@
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 //
-// Official repository: https://github.com/madmongo1/router
+// Official repository: https://github.com/madmongo1/arby
 //
 
 #ifndef ARBY_ARBY_POWER_TRADE_CONNECTOR_HPP
@@ -49,16 +49,13 @@ namespace power_trade
         void
         send(std::string s)
         {
-            asio::dispatch(impl_->get_executor(),
-                           [s = std::move(s), impl = impl_]
-                           { impl->send(std::move(s)); });
+            asio::dispatch(impl_->get_executor(), [s = std::move(s), impl = impl_] { impl->send(std::move(s)); });
         }
 
         void
         interrupt()
         {
-            asio::dispatch(impl_->get_executor(),
-                           [impl = impl_] { impl->interrupt(); });
+            asio::dispatch(impl_->get_executor(), [impl = impl_] { impl->interrupt(); });
         }
 
         connector_impl &
@@ -88,8 +85,7 @@ namespace power_trade
         asio::awaitable< util::cross_executor_connection >
         watch_messages(json::string type, message_slot slot);
 
-        asio::awaitable<
-            std::tuple< util::cross_executor_connection, connection_state > >
+        asio::awaitable< std::tuple< util::cross_executor_connection, connection_state > >
         watch_connection_state(connection_state_slot slot);
 
       private:

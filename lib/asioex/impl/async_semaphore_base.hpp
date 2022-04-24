@@ -1,20 +1,20 @@
 //
-// Copyright (c) 2021 Richard Hodges (hodges.r@gmail.com)
+// Copyright (c) 2022 Richard Hodges (hodges.r@gmail.com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 //
-// Official repository: https://github.com/madmongo1/asio_experiments
+// Official repository: https://github.com/madmongo1/arby
 //
 
 #ifndef ASIOEX_IMPL_ASYNC_SEMAPHORE_BASE_HPP
 #define ASIOEX_IMPL_ASYNC_SEMAPHORE_BASE_HPP
 
-#include <asioex/error_code.hpp>
 #include <asioex/async_semaphore.hpp>
 #include <asioex/detail/semaphore_wait_op.hpp>
+#include <asioex/error_code.hpp>
 
-namespace asioex
+namespace arby::asioex
 {
 async_semaphore_base::async_semaphore_base(int initial_count)
 : waiters_()
@@ -29,8 +29,7 @@ async_semaphore_base::~async_semaphore_base()
     {
         detail::bilist_node *current = p;
         p                            = p->next_;
-        static_cast< detail::semaphore_wait_op * >(current)->complete(
-            asio::error::operation_aborted);
+        static_cast< detail::semaphore_wait_op * >(current)->complete(asio::error::operation_aborted);
     }
 }
 
@@ -56,8 +55,7 @@ async_semaphore_base::release()
         return;
 
     decrement();
-    static_cast< detail::semaphore_wait_op * >(waiters_.next_)
-        ->complete(std::error_code());
+    static_cast< detail::semaphore_wait_op * >(waiters_.next_)->complete(std::error_code());
 }
 
 bool
@@ -79,6 +77,6 @@ async_semaphore_base::decrement()
     return --count_;
 }
 
-}   // namespace asioex
+}   // namespace arby::asioex
 
 #endif

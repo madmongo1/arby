@@ -4,7 +4,7 @@
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 //
-// Official repository: https://github.com/madmongo1/router
+// Official repository: https://github.com/madmongo1/arby
 //
 
 #ifndef ARBY_ARBY_POWER_TRADE_ORDER_BOOK_HPP
@@ -49,9 +49,7 @@ struct order_book
         std::chrono::system_clock::time_point timestamp);
 
     void
-    remove(json::string const                   &order_id,
-           side_type                             side,
-           std::chrono::system_clock::time_point timestamp);
+    remove(json::string const &order_id, side_type side, std::chrono::system_clock::time_point timestamp);
 
     void
     reset();
@@ -60,14 +58,10 @@ struct order_book
     operator<<(std::ostream &os, order_book const &book);
 
     using offer_ladder      = std::map< price_type, level_data, std::less<> >;
-    using offer_order_cache = std::map<
-        json::string,
-        std::tuple< offer_ladder::iterator, level_data::qty_list ::iterator > >;
+    using offer_order_cache = std::map< json::string, std::tuple< offer_ladder::iterator, level_data::qty_list ::iterator > >;
 
     using bid_ladder      = std::map< price_type, level_data, std::greater<> >;
-    using bid_order_cache = std::map<
-        json::string,
-        std::tuple< bid_ladder::iterator, level_data::qty_list ::iterator > >;
+    using bid_order_cache = std::map< json::string, std::tuple< bid_ladder::iterator, level_data::qty_list ::iterator > >;
 
     std::chrono::system_clock::time_point last_update_;
 

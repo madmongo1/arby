@@ -4,15 +4,17 @@
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 //
-// Official repository: https://github.com/madmongo1/router
+// Official repository: https://github.com/madmongo1/arby
 //
 
 #include "connector_impl.hpp"
 
+#include "asioex/scoped_interrupt.hpp"
 #include "network/connect_ssl.hpp"
 #include "util/monitor.hpp"
 #include "util/truncate.hpp"
 
+#include <boost/filesystem.hpp>
 #include <boost/scope_exit.hpp>
 #include <fmt/chrono.h>
 #include <fmt/format.h>
@@ -20,6 +22,8 @@
 
 namespace arby::power_trade
 {
+
+namespace fs = boost::filesystem;
 
 using namespace std::literals;
 
@@ -32,9 +36,7 @@ connector_impl::connector_impl(executor_type exec, ssl::context &sslctx)
 void
 connector_impl::start()
 {
-    asio::co_spawn(get_executor(),
-                   run(shared_from_this()),
-                   asio::bind_cancellation_slot(stop_.slot(), asio::detached));
+    asio::co_spawn(get_executor(), run(shared_from_this()), asio::bind_cancellation_slot(stop_.slot(), asio::detached));
 }
 
 void
@@ -68,7 +70,7 @@ connector_impl::run(std::shared_ptr< connector_impl > self)
     using asio::use_awaitable;
     auto sentinel = util::monitor::record("power_trade_connector::run");
 
-    for (;;)
+    for (; !stopped_;)
     {
         try
         {
@@ -76,8 +78,7 @@ connector_impl::run(std::shared_ptr< connector_impl > self)
         }
         catch (std::exception &e)
         {
-            fmt::print(
-                "{}::{} : exception : {}", classname, __func__, e.what());
+            fmt::print("{}::{} : exception : {}", classname, __func__, e.what());
         }
         if (stopped_)
             break;
@@ -90,8 +91,7 @@ connector_impl::run(std::shared_ptr< connector_impl > self)
 asio::awaitable< void >
 connector_impl::run_connection()
 {
-    auto sentinel =
-        util::monitor::record("power_trade_connector::run_connection");
+    auto sentinel = util::monitor::record("power_trade_connector::run_connection");
     try
     {
         using asio::bind_cancellation_slot;
@@ -123,23 +123,29 @@ connector_impl::run_connection()
             my_slot.clear();
         };
 
-        auto ic_slot = interrupt_connection_.slot();
-        ic_slot.assign(
-            [&](asio::cancellation_type type)
-            {
-                fmt::print("{}::run_connection : interrupted!\n", classname);
-                ws.next_layer().next_layer().close();
-                forward_signal.emit(type);
-            });
-        BOOST_SCOPE_EXIT_ALL(&)
-        {
-            ic_slot.clear();
-        };
-
+        //        auto ic_slot = interrupt_connection_.slot();
+        auto s1 = asioex::scoped_interrupt(interrupt_connection_,
+                                           [&]
+                                           {
+                                               fmt::print("{}::run_connection : interrupted!\n", classname);
+                                               ws.next_layer().next_layer().close();
+                                               asioex::terminate(forward_signal);
+                                           });
+        /*
+                ic_slot.assign(
+                    [&](asio::cancellation_type type)
+                    {
+                        fmt::print("{}::run_connection : interrupted!\n",
+           classname); ws.next_layer().next_layer().close();
+                        forward_signal.emit(type);
+                    });
+                BOOST_SCOPE_EXIT_ALL(&)
+                {
+                    ic_slot.clear();
+                };
+        */
         co_await co_spawn(
-            get_executor(),
-            send_loop(ws) || receive_loop(ws),
-            bind_cancellation_slot(forward_signal.slot(), use_awaitable));
+            get_executor(), send_loop(ws) || receive_loop(ws), bind_cancellation_slot(forward_signal.slot(), use_awaitable));
 
         set_connection_state(asio::error::not_connected);
     }
@@ -163,8 +169,7 @@ connector_impl::interruptible_connect(ws_stream &stream)
     using asio::co_spawn;
     using asio::use_awaitable;
 
-    auto sentinel =
-        util::monitor::record(fmt::format("{}::{}()", classname, __func__));
+    auto sentinel = util::monitor::record(fmt::format("{}::{}()", classname, __func__));
 
     bool interrupted       = false;
     auto cancel_connect    = asio::cancellation_signal();
@@ -189,10 +194,9 @@ connector_impl::interruptible_connect(ws_stream &stream)
             my_slot.clear();
         };
 
-        co_await co_spawn(
-            get_executor(),
-            network::connect(stream, host_, port_, path_),
-            bind_cancellation_slot(cancel_connect.slot(), use_awaitable));
+        co_await co_spawn(get_executor(),
+                          network::connect(stream, host_, port_, path_),
+                          bind_cancellation_slot(cancel_connect.slot(), use_awaitable));
     }
     if (interrupted)
         throw system_error(asio::error::operation_aborted, "interrupted");
@@ -219,8 +223,7 @@ connector_impl::send_loop(ws_stream &ws)
                 break;
             assert(!send_queue_.empty());
             fmt::print("{}: sending {}\n", __func__, send_queue_.front());
-            co_await ws.async_write(asio::buffer(send_queue_.front()),
-                                    use_awaitable);
+            co_await ws.async_write(asio::buffer(send_queue_.front()), use_awaitable);
             send_queue_.pop_front();
         }
     }
@@ -234,10 +237,15 @@ connector_impl::send_loop(ws_stream &ws)
 asio::awaitable< void >
 connector_impl::receive_loop(ws_stream &ws)
 {
-    auto sentinel =
-        util::monitor::record("power_trade_connector::receive_loop");
+    auto sentinel = util::monitor::record("power_trade_connector::receive_loop");
     using asio::redirect_error;
     using asio::use_awaitable;
+
+    auto now     = std::chrono::system_clock::now();
+    auto fname   = fmt::format("connector-{}.log", now);
+    auto logpath = fs::temp_directory_path() / fs::path(fname);
+    fmt::print("logging to {}\n", logpath.string());
+    logfile_.open(logpath.native());
 
     try
     {
@@ -246,8 +254,7 @@ connector_impl::receive_loop(ws_stream &ws)
         buf.max_size(10'000'000);
         for (; !ec;)
         {
-            auto size =
-                co_await ws.async_read(buf, redirect_error(use_awaitable, ec));
+            auto size = co_await ws.async_read(buf, redirect_error(use_awaitable, ec));
             if (ec)
             {
                 fmt::print("{}: read error: {}\n", __func__, ec.message());
@@ -256,9 +263,9 @@ connector_impl::receive_loop(ws_stream &ws)
 
             auto now = std::chrono::system_clock::now();
 
-            auto data = json::string_view(
-                static_cast< char const * >(buf.data().data()),
-                buf.data().size());
+            auto data = boost::string_view(static_cast< char const * >(buf.data().data()), buf.data().size());
+
+            logfile_ << data << '\n';
 
             auto handled = handle_message_data(data, ec);
             if (ec)
@@ -267,11 +274,7 @@ connector_impl::receive_loop(ws_stream &ws)
             buf.consume(size);
             if (!handled)
             {
-                fmt::print("{}::{} : unhandled {} : {}\n",
-                           classname,
-                           __func__,
-                           now,
-                           util::truncate(data));
+                fmt::print("{}::{} : unhandled {} : {}\n", classname, __func__, now, util::truncate(data));
             }
         }
 
@@ -298,13 +301,12 @@ connector_impl::handle_message_data(json::string_view data, error_code &ec)
         if (pobject->size() == 1)
         {
             auto key     = pobject->begin()->key();
-            auto payload = std::shared_ptr< json::object const >(
-                pjson, pobject->begin()->value().if_object());
+            auto payload = std::shared_ptr< json::object const >(pjson, pobject->begin()->value().if_object());
 
             if (!payload)
                 goto unrecognised;
 
-            auto map_iter = signal_map_.find(key);
+            auto map_iter = signal_map_.find(json::string(key.data(), key.size()));
             if (map_iter == signal_map_.end())
                 return false;
             auto &sig = map_iter->second;
@@ -321,8 +323,7 @@ connector_impl::handle_message_data(json::string_view data, error_code &ec)
         }
     }
 unrecognised:
-    fmt::print(
-        "{}::{} unrecognised JSON format: {}", classname, __func__, data);
+    fmt::print("{}::{} unrecognised JSON format: {}", classname, __func__, data);
     return false;
 }
 
@@ -334,8 +335,7 @@ connector_impl::watch_messages(json::string message_type, message_slot slot)
 }
 
 boost::signals2::connection
-connector_impl::watch_connection_state(connection_state     &current,
-                                       connection_state_slot slot)
+connector_impl::watch_connection_state(connection_state &current, connection_state_slot slot)
 {
     current = connstate_;
     return connstate_signal_.connect(std::move(slot));

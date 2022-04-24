@@ -4,7 +4,7 @@ include(FetchContent)
 
 project(Arby VERSION 0.1)
 
-find_package(Boost 1.78 REQUIRED COMPONENTS system thread filesystem container)
+find_package(Boost 1.79 REQUIRED COMPONENTS system thread filesystem container)
 find_package(OpenSSL REQUIRED)
 find_package(Threads REQUIRED)
 FetchContent_Declare(

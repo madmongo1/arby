@@ -4,7 +4,7 @@
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 //
-// Official repository: https://github.com/madmongo1/router
+// Official repository: https://github.com/madmongo1/arby
 //
 
 #include "order_book.hpp"
@@ -90,11 +90,8 @@ struct table
 std::ostream &
 operator<<(std::ostream &os, const order_book &book)
 {
-    fmt::print(os,
-               "last_update: {}, bid depth: {}, offer depth: {}\n",
-               book.last_update_,
-               book.aggregate_bids_,
-               book.aggregate_offers_);
+    fmt::print(
+        os, "last_update: {}, bid depth: {}, offer depth: {}\n", book.last_update_, book.aggregate_bids_, book.aggregate_offers_);
 
     auto max_levels = std::size_t(10);
 
@@ -103,8 +100,7 @@ operator<<(std::ostream &os, const order_book &book)
     std::size_t row = 0;
 
     {
-        auto itenth = std::next(book.offers_.begin(),
-                                std::min(book.offers_.size(), max_levels));
+        auto itenth = std::next(book.offers_.begin(), std::min(book.offers_.size(), max_levels));
 
         auto first = std::make_reverse_iterator(itenth);
         auto last  = book.offers_.rend();
@@ -151,7 +147,7 @@ order_book::add(const json::string                   &order_id,
             ilevel = bids_.emplace(price, level_data()).first;
         auto &detail = ilevel->second;
         detail.aggregate_depth += quantity;
-        auto iqty = detail.orders.insert(detail.orders.end(), quantity);
+        auto iqty            = detail.orders.insert(detail.orders.end(), quantity);
         bid_cache_[order_id] = std::make_tuple(ilevel, iqty);
         aggregate_bids_ += quantity;
     }
@@ -162,7 +158,7 @@ order_book::add(const json::string                   &order_id,
             ilevel = offers_.emplace(price, level_data()).first;
         auto &detail = ilevel->second;
         detail.aggregate_depth += quantity;
-        auto iqty = detail.orders.insert(detail.orders.end(), quantity);
+        auto iqty              = detail.orders.insert(detail.orders.end(), quantity);
         offer_cache_[order_id] = std::make_tuple(ilevel, iqty);
         aggregate_offers_ += quantity;
     }
@@ -170,9 +166,7 @@ order_book::add(const json::string                   &order_id,
     last_update_ = timestamp;
 }
 void
-order_book::remove(const json::string                   &order_id,
-                   side_type                             side,
-                   std::chrono::system_clock::time_point timestamp)
+order_book::remove(const json::string &order_id, side_type side, std::chrono::system_clock::time_point timestamp)
 {
     if (timestamp < last_update_)
         throw std::runtime_error("updates out of order");

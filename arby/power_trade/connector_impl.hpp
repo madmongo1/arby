@@ -4,7 +4,7 @@
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 //
-// Official repository: https://github.com/madmongo1/router
+// Official repository: https://github.com/madmongo1/arby
 //
 
 #ifndef ARBY_ARBY_POWER_TRADE_CONNECTOR_IMPL_HPP
@@ -20,6 +20,7 @@
 #include <boost/unordered_map.hpp>
 
 #include <deque>
+#include <fstream>
 #include <functional>
 #include <iosfwd>
 #include <tuple>
@@ -99,8 +100,7 @@ struct field_matcher
     static field_set
     sorted(field_set in)
     {
-        auto pred = [](field const &l, field const &r)
-        { return get< 0 >(l) < get< 0 >(r); };
+        auto pred = [](field const &l, field const &r) { return get< 0 >(l) < get< 0 >(r); };
 
         std::sort(in.begin(), in.end(), pred);
         return in;
@@ -169,22 +169,19 @@ struct connector_impl
 
     // Note that the signal type is not thread-safe. You must only interact with
     // the signals while on the same executor and thread as the connector
-    using message_signal = boost::signals2::signal_type<
-        void(std::shared_ptr< json::object const >),
-        boost::signals2::keywords::mutex_type<
-            boost::signals2::dummy_mutex > >::type;
+    using message_signal =
+        boost::signals2::signal_type< void(std::shared_ptr< json::object const >),
+                                      boost::signals2::keywords::mutex_type< boost::signals2::dummy_mutex > >::type;
 
     using message_slot          = message_signal::slot_type;
     using message_extended_slot = message_signal::extended_slot_type;
 
-    using connection_state_signal = boost::signals2::signal_type<
-        void(connection_state),
-        boost::signals2::keywords::mutex_type<
-            boost::signals2::dummy_mutex > >::type;
+    using connection_state_signal =
+        boost::signals2::signal_type< void(connection_state),
+                                      boost::signals2::keywords::mutex_type< boost::signals2::dummy_mutex > >::type;
 
-    using connection_state_slot = connection_state_signal::slot_type;
-    using connection_state_extended_slot =
-        connection_state_signal::extended_slot_type;
+    using connection_state_slot          = connection_state_signal::slot_type;
+    using connection_state_extended_slot = connection_state_signal::extended_slot_type;
 
     /// @brief Constructor
     /// @param exec The internal executor to use for IO
@@ -210,8 +207,7 @@ struct connector_impl
     watch_messages(json::string message_type, message_slot slot);
 
     boost::signals2::connection
-    watch_connection_state(connection_state     &current,
-                           connection_state_slot slot);
+    watch_connection_state(connection_state &current, connection_state_slot slot);
 
   private:
     asio::awaitable< void >
@@ -255,13 +251,17 @@ struct connector_impl
         using is_transparent = void;
         using boost::hash< boost::string_view >::operator();
         using std::equal_to<>::                  operator();
+        bool
+        operator()(json::string const &s) const
+        {
+            return (*this)(boost::string_view(s.data(), s.size()));
+        }
     };
 
     connection_state_signal connstate_signal_;
     connection_state        connstate_ { asio::error::not_connected };
 
-    using signal_map = boost::
-        unordered_map< json::string, message_signal, sv_comp_equ, sv_comp_equ >;
+    using signal_map = boost::unordered_map< json::string, message_signal, sv_comp_equ, sv_comp_equ >;
     signal_map signal_map_;
 
     // state
@@ -270,6 +270,7 @@ struct connector_impl
     asio::cancellation_signal interrupt_connection_;
     asio::cancellation_signal stop_;
     bool                      stopped_ = false;
+    std::ofstream             logfile_;
 };
 }   // namespace arby::power_trade
 

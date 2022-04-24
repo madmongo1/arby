@@ -4,7 +4,7 @@
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 //
-// Official repository: https://github.com/madmongo1/router
+// Official repository: https://github.com/madmongo1/arby
 //
 
 #ifndef ARBY_LIB_UTIL_CROSS_EXECUTOR_CONNECTION_HPP
@@ -38,9 +38,7 @@ namespace util
 
     struct cross_executor_connection
     {
-        cross_executor_connection(
-            std::shared_ptr< has_executor_base > owner      = {},
-            boost::signals2::connection          connection = {});
+        cross_executor_connection(std::shared_ptr< has_executor_base > owner = {}, boost::signals2::connection connection = {});
 
         cross_executor_connection(cross_executor_connection &&other);
 
@@ -53,7 +51,6 @@ namespace util
         disconnect() noexcept;
 
       private:
-
         std::shared_ptr< has_executor_base > owner_;
         boost::signals2::connection          connection_;
     };

@@ -1,10 +1,10 @@
 #ifndef ASIOEX_CONFIG_HPP
 #define ASIOEX_CONFIG_HPP
 
-#include <boost/asio/error.hpp>
+#include "config/asio.hpp"
 
-namespace asio = boost::asio;
-using boost::system::error_category;
-using boost::system::error_code;
+namespace arby::asioex
+{
 
+}   // namespace arby::asioex
 #endif

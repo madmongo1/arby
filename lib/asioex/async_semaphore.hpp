@@ -1,17 +1,26 @@
+//
+// Copyright (c) 2022 Richard Hodges (hodges.r@gmail.com)
+//
+// Distributed under the Boost Software License, Version 1.0. (See accompanying
+// file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+//
+// Official repository: https://github.com/madmongo1/arby
+//
+
 #ifndef ASIOEX_ASYNC_SEMAPHORE_HPP
 #define ASIOEX_ASYNC_SEMAPHORE_HPP
 
+#include <asioex/detail/bilist_node.hpp>
+#include <asioex/error_code.hpp>
 #include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/detail/config.hpp>
-#include <asioex/detail/bilist_node.hpp>
-#include <asioex/error_code.hpp>
 
-namespace asioex
+namespace arby::asioex
 {
 namespace detail
 {
-struct semaphore_wait_op;
+    struct semaphore_wait_op;
 }
 
 struct async_semaphore_base
@@ -105,11 +114,10 @@ struct basic_async_semaphore : async_semaphore_base
     /// handler's associated executor. If no executor is associated with the
     /// completion handler, the handler will be invoked as if by `post` to the
     /// async_semaphore's associated default executor.
-    template <  BOOST_ASIO_COMPLETION_TOKEN_FOR(void(error_code)) CompletionHandler
-                   BOOST_ASIO_DEFAULT_COMPLETION_TOKEN_TYPE(executor_type) >
+    template < BOOST_ASIO_COMPLETION_TOKEN_FOR(void(error_code))
+                   CompletionHandler BOOST_ASIO_DEFAULT_COMPLETION_TOKEN_TYPE(executor_type) >
     BOOST_ASIO_INITFN_RESULT_TYPE(CompletionHandler, void(error_code))
-    async_acquire(
-        CompletionHandler &&token BOOST_ASIO_DEFAULT_COMPLETION_TOKEN(executor_type));
+    async_acquire(CompletionHandler &&token BOOST_ASIO_DEFAULT_COMPLETION_TOKEN(executor_type));
 
   private:
     executor_type exec_;
@@ -117,7 +125,7 @@ struct basic_async_semaphore : async_semaphore_base
 
 using async_semaphore = basic_async_semaphore<>;
 
-}   // namespace asioex
+}   // namespace arby::asioex
 
 #endif
 

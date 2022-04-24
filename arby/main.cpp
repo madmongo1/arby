@@ -1,8 +1,17 @@
+//
+// Copyright (c) 2022 Richard Hodges (hodges.r@gmail.com)
+//
+// Distributed under the Boost Software License, Version 1.0. (See accompanying
+// file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+//
+// Official repository: https://github.com/madmongo1/arby
+//
+
 #include "asioex/async_semaphore.hpp"
 #include "config/websocket.hpp"
 #include "power_trade/connector.hpp"
 #include "power_trade/event_listener.hpp"
-#include "power_trade/orderbook_listener.hpp"
+#include "power_trade/orderbook_listener_impl.hpp"
 #include "util/monitor.hpp"
 
 #include <boost/asio.hpp>
@@ -49,8 +58,7 @@ set_up_stdin()
     ::tcgetattr(STDIN_FILENO, &original_termios);
     auto my_termios = original_termios;
     my_termios.c_lflag &= ~(ICANON);
-    std::atexit([]()
-                { ::tcsetattr(STDIN_FILENO, TCSANOW, &original_termios); });
+    std::atexit([]() { ::tcsetattr(STDIN_FILENO, TCSANOW, &original_termios); });
 
     //    ::cfmakeraw(&my_termios);
     ::tcsetattr(STDIN_FILENO, TCSANOW, &my_termios);
@@ -64,17 +72,13 @@ monitor_quit(asio::cancellation_signal &sig, power_trade::connector &conn)
     using asio::use_awaitable;
 
     set_up_stdin();
-    auto input = asio::posix::stream_descriptor(
-        co_await asio::this_coro::executor, ::dup(STDIN_FILENO));
+    auto input = asio::posix::stream_descriptor(co_await asio::this_coro::executor, ::dup(STDIN_FILENO));
 
     for (;;)
     {
         char       buf;
         error_code ec;
-        auto       size =
-            co_await asio::async_read(input,
-                                      asio::mutable_buffer(&buf, 1),
-                                      redirect_error(use_awaitable, ec));
+        auto       size = co_await asio::async_read(input, asio::mutable_buffer(&buf, 1), redirect_error(use_awaitable, ec));
         if (ec)
             break;
         if (size && buf == 'q')
@@ -99,26 +103,11 @@ check(ssl::context &sslctx)
     auto this_exec = co_await asio::this_coro::executor;
 
     auto sentinel = util::monitor::record("check");
-    auto con = std::make_shared< power_trade::connector >(this_exec, sslctx);
+    auto con      = std::make_shared< power_trade::connector >(this_exec, sslctx);
 
     auto watch1 = power_trade::event_listener::create(con, "heartbeat");
-    auto watch2 =
-        power_trade::orderbook_listener::create(this_exec, con, "ETH-USD");
-
-    /*
-    const static char req[] = R"json(
-{
-    "subscribe":
-    {
-        "market_id":"0",
-        "symbol":"ETH-USD",
-        "type":"snap_full_updates",
-        "interval":"0",
-        "user_tag":"another_anything_unique"
-    }
-})json";
-    con->send(req);
-*/
+    auto watch2 = power_trade::orderbook_listener_impl::create(this_exec, con, "ETH-USD");
+    auto watch3 = power_trade::orderbook_listener_impl::create(this_exec, con, "BTC-USD");
 
     asio::cancellation_signal cancel_sig;
     co_await monitor_quit(cancel_sig, *con);

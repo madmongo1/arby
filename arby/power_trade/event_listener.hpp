@@ -4,7 +4,7 @@
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 //
-// Official repository: https://github.com/madmongo1/router
+// Official repository: https://github.com/madmongo1/arby
 //
 
 #ifndef ARBY_ARBY_POWER_TRADE_EVENT_LISTENER_HPP
@@ -23,8 +23,7 @@ namespace power_trade
         using executor_type = connector_impl::executor_type;
 
         static std::shared_ptr< event_listener >
-        create(std::shared_ptr< connector > connector,
-               json::string const          &primary);
+        create(std::shared_ptr< connector > connector, json::string const &primary);
 
         event_listener(std::shared_ptr< connector > connector);
 

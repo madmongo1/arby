@@ -1,0 +1,50 @@
+{
+    "version": 2,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 22,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "release-gcc",
+            "inherits": "default",
+            "displayName": "Release GCC",
+            "description": "Release GCC build using Ninja generator",
+            "binaryDir": "${sourceDir}/build/release-gcc",
+            "cacheVariables": {
+                "CMAKE_PREFIX_PATH": {
+                    "type": "PATH",
+                    "value": "/home/rhodges/work/libstdc++"
+                },
+                "CMAKE_BUILD_TYPE": {
+                    "type": "STRING",
+                    "value": "Release"
+                }
+            },
+            "environment": {
+                "MY_ENVIRONMENT_VARIABLE": "Test",
+                "PATH": "$env{HOME}/ninja/bin:$penv{PATH}"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "release-gcc",
+            "configurePreset": "release-gcc"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "release-gcc",
+            "configurePreset": "release-gcc",
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "noTestsAction": "error",
+                "stopOnFailure": true
+            }
+        }
+    ]
+}

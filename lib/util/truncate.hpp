@@ -1,3 +1,12 @@
+//
+// Copyright (c) 2022 Richard Hodges (hodges.r@gmail.com)
+//
+// Distributed under the Boost Software License, Version 1.0. (See accompanying
+// file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+//
+// Official repository: https://github.com/madmongo1/arby
+//
+
 #include <boost/utility/string_view_fwd.hpp>
 
 #include <list>
@@ -54,9 +63,6 @@ struct string_list
     node *first = nullptr;
 };
 
-template < class T >
-struct truncate_op;
-
 struct truncate_op_base
 {
     std::string_view
@@ -67,8 +73,7 @@ struct truncate_op_base
     thread_local static string_list buffers_;
 };
 
-template <>
-struct truncate_op< std::string_view > : truncate_op_base
+struct truncate_op : truncate_op_base
 {
     truncate_op(std::string_view sv, std::size_t limit);
 
@@ -79,13 +84,13 @@ struct truncate_op< std::string_view > : truncate_op_base
     std::string_view sv_;
 };
 
-truncate_op< std::string_view >
-truncate(std::string_view sv, std::size_t limit = 256);
+// truncate_op< std::string_view >
+// truncate(std::string_view sv, std::size_t limit = 256);
 
-truncate_op< std::string_view >
+truncate_op
 truncate(std::string const &s, std::size_t limit = 256);
 
-truncate_op< std::string_view >
+truncate_op
 truncate(boost::string_view sv, std::size_t limit = 256);
 
 }   // namespace arby::util

@@ -4,7 +4,7 @@
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 //
-// Official repository: https://github.com/madmongo1/router
+// Official repository: https://github.com/madmongo1/arby
 //
 
 #include "monitor.hpp"
@@ -29,8 +29,7 @@ operator<<(std::ostream &os, instance const &i)
 bool
 operator<(instance const &l, instance const &r)
 {
-    return std::tie(l.name, l.version, l.creation_time) <
-           std::tie(r.name, r.version, r.creation_time);
+    return std::tie(l.name, l.version, l.creation_time) < std::tie(r.name, r.version, r.creation_time);
 }
 
 monitor::sentinel::sentinel(monitor::instance_iter it)
@@ -53,11 +52,8 @@ monitor::record(std::string name)
 {
     auto version = next_index_[name]++;
     auto time    = std::chrono::system_clock::now();
-    auto result  = sentinel(instances_
-                               .insert(instance { .name    = std::move(name),
-                                                   .version = version,
-                                                   .creation_time = time })
-                               .first);
+    auto result =
+        sentinel(instances_.insert(instance { .name = std::move(name), .version = version, .creation_time = time }).first);
     fmt::print("monitor: create {}\n", *result.iter);
     return result;
 }

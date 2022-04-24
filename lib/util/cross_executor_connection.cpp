@@ -4,7 +4,7 @@
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 //
-// Official repository: https://github.com/madmongo1/router
+// Official repository: https://github.com/madmongo1/arby
 //
 
 #include "cross_executor_connection.hpp"
@@ -13,15 +13,13 @@ namespace arby
 {
 namespace util
 {
-    cross_executor_connection::cross_executor_connection(
-        std::shared_ptr< has_executor_base > owner,
-        boost::signals2::connection          connection)
+    cross_executor_connection::cross_executor_connection(std::shared_ptr< has_executor_base > owner,
+                                                         boost::signals2::connection          connection)
     : owner_(std::move(owner))
     , connection_(std::move(connection))
     {
     }
-    cross_executor_connection::cross_executor_connection(
-        cross_executor_connection &&other)
+    cross_executor_connection::cross_executor_connection(cross_executor_connection &&other)
     : owner_(std::move(other.owner_))
     , connection_(std::move(other.connection_))
     {
@@ -39,9 +37,7 @@ namespace util
     {
         if (owner_)
         {
-            asio::dispatch(owner_->get_executor(),
-                           [owner = owner_, connection = connection_]
-                           { connection.disconnect(); });
+            asio::dispatch(owner_->get_executor(), [owner = owner_, connection = connection_] { connection.disconnect(); });
         }
     }
 }   // namespace util
