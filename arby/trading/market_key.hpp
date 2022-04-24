@@ -14,14 +14,12 @@
 
 #include <boost/variant2.hpp>
 
-namespace arby
-{
-namespace trading
+namespace arby::trading
 {
 
 struct market_key
 {
-    market_key(spot_market_key key)
+    market_key(spot_market_key key = spot_market_key { .base = {}, .term = {} })
     : var_(std::move(key))
     {
     }
@@ -48,7 +46,6 @@ to_string(market_key const &mk);
 std::ostream &
 operator<<(std::ostream &os, market_key const &key);
 
-}   // namespace trading
-}   // namespace arby
+}   // namespace arby::trading
 
 #endif   // ARBY_ARBY_TRADING_MARKET_KEY_HPP

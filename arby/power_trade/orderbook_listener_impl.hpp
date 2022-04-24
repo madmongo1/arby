@@ -13,6 +13,7 @@
 #include "power_trade/connector.hpp"
 #include "power_trade/native_symbol.hpp"
 #include "power_trade/order_book.hpp"
+#include "trading/aggregate_book_feed.hpp"
 #include "trading/market_key.hpp"
 
 #include <boost/variant2.hpp>
@@ -35,7 +36,8 @@ namespace power_trade
 /// emitted from the connector must be marshalled onto our own executor via
 /// POST. This also separates the processing of our data from the io loop.
 struct orderbook_listener_impl
-: util::has_executor_base
+: virtual util::has_executor_base
+, trading::implement_aggregate_book_feed< orderbook_listener_impl >
 , std::enable_shared_from_this< orderbook_listener_impl >
 {
     static constexpr char classname[] = "orderbook_listener_impl";

@@ -80,6 +80,8 @@ struct truncate_op : truncate_op_base
     friend std::ostream &
     operator<<(std::ostream &os, truncate_op const &op);
 
+    friend std::string to_string(truncate_op const& op);
+
   private:
     std::string_view sv_;
 };

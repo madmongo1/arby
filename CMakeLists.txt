@@ -27,15 +27,20 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/quicknir/wise_enum.git
   GIT_TAG        master
 )
-#FetchContent_MakeAvailable(wise_enum_dep)
-
 if(NOT wise_enum_dep_POPULATED)
     FetchContent_Populate(wise_enum_dep)
     add_subdirectory(${wise_enum_dep_SOURCE_DIR})
     target_include_directories(wise_enum INTERFACE "$<BUILD_INTERFACE:${wise_enum_dep_SOURCE_DIR}>")
 endif()
 
+FetchContent_Declare(
+  doctest
+  GIT_REPOSITORY https://github.com/doctest/doctest.git
+  GIT_TAG        v2.4.8
+)
+FetchContent_MakeAvailable(doctest)
 
+enable_testing()
 
 add_subdirectory(lib)
 add_subdirectory(arby)

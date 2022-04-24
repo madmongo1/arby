@@ -18,6 +18,7 @@ namespace arby::trading
 {
 using qty_type   = boost::multiprecision::cpp_dec_float_50;
 using price_type = boost::multiprecision::cpp_dec_float_50;
+using timestamp_type = std::chrono::system_clock::time_point;
 
 WISE_ENUM(side_type, buy, sell)
 std::ostream& operator<<(std::ostream& os, side_type side);

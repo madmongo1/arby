@@ -12,17 +12,17 @@
 namespace arby::trading
 {
 
-std::string to_string(market_key const& mk)
+std::string
+to_string(market_key const &mk)
 {
-    auto to_string_op = [](auto const& x) { return to_string(x); };
+    auto to_string_op = [](auto const &x) { return to_string(x); };
     return visit(to_string_op, mk.as_variant());
 }
 
-std::ostream& operator<<(std::ostream& os, market_key const& key)
+std::ostream &
+operator<<(std::ostream &os, market_key const &key)
 {
     return os << to_string(key);
 }
-
-
 
 }   // namespace arby::trading

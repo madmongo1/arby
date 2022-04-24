@@ -92,7 +92,7 @@ string_list thread_local truncate_op_base::buffers_;
 std::string_view
 truncate_op_base::transform(std::string_view sv, std::size_t limit) const
 {
-    limit = (std::max)(limit, std::size_t(32));
+    limit = (std::max)(limit, std::size_t(3));
     if (!handle.pnode && sv.size() > limit)
     {
         handle = buffers_.pop();
@@ -137,6 +137,11 @@ truncate_op
 truncate(boost::string_view sv, std::size_t limit)
 {
     return truncate_op(std::string_view(sv.data(), sv.size()), limit);
+}
+
+std::string to_string(truncate_op const& op)
+{
+    return { op.sv_.begin(), op.sv_.end() };
 }
 
 }   // namespace arby::util

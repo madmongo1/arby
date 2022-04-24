@@ -20,11 +20,27 @@
 namespace arby::trading
 {
 
+struct price_depth
+{
+    price_type price;
+    qty_type   depth;
+};
+
+struct bid_ladder : std::vector< price_depth >
+{
+};
+
+struct offer_ladder : std::vector< price_depth >
+{
+    std::vector< price_depth > data_;
+};
+
 struct aggregate_book
 {
-    market_key market;
-    std::chrono::system_clock::time_point timestamp;
-
+    market_key     market;
+    timestamp_type timestamp;
+    bid_ladder     bids;
+    offer_ladder   offers;
 };
 
 }   // namespace arby::trading
