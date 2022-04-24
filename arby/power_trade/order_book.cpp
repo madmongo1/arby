@@ -132,15 +132,15 @@ operator<<(std::ostream &os, const order_book &book)
 }
 void
 order_book::add(const json::string                   &order_id,
-                price_type                            price,
-                qty_type                              quantity,
-                side_type                             side,
+                trading::price_type                   price,
+                trading::qty_type                     quantity,
+                trading::side_type                    side,
                 std::chrono::system_clock::time_point timestamp)
 {
     if (timestamp < last_update_)
         throw std::runtime_error("updates out of order");
 
-    if (side == buy)
+    if (side == trading::buy)
     {
         auto ilevel = bids_.find(price);
         if (ilevel == bids_.end())
@@ -166,12 +166,12 @@ order_book::add(const json::string                   &order_id,
     last_update_ = timestamp;
 }
 void
-order_book::remove(const json::string &order_id, side_type side, std::chrono::system_clock::time_point timestamp)
+order_book::remove(const json::string &order_id, trading::side_type side, std::chrono::system_clock::time_point timestamp)
 {
     if (timestamp < last_update_)
         throw std::runtime_error("updates out of order");
 
-    if (side == buy)
+    if (side == trading::buy)
     {
         auto icache = bid_cache_.find(order_id);
         if (icache == bid_cache_.end())

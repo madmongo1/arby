@@ -5,6 +5,5 @@ target_link_libraries(arby PUBLIC
         Boost::system Boost::thread Boost::filesystem
         Threads::Threads
         OpenSSL::SSL OpenSSL::Crypto
-        fmt::fmt
         Arby::asioex Arby::util Arby::network Arby::config)
 add_executable(Arby::arby ALIAS arby)

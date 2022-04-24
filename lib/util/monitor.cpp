@@ -11,8 +11,9 @@
 
 #include <fmt/chrono.h>
 #include <fmt/ostream.h>
-
 #include <tuple>
+#include <spdlog/spdlog.h>
+
 
 namespace arby::util
 {
@@ -54,13 +55,13 @@ monitor::record(std::string name)
     auto time    = std::chrono::system_clock::now();
     auto result =
         sentinel(instances_.insert(instance { .name = std::move(name), .version = version, .creation_time = time }).first);
-    fmt::print("monitor: create {}\n", *result.iter);
+    spdlog::debug("monitor: create {}", *result.iter);
     return result;
 }
 void
 monitor::erase(monitor::instance_iter iter)
 {
-    fmt::print("monitor: destroy {}\n", *iter);
+    spdlog::debug("monitor: destroy {}", *iter);
     instances_.erase(iter);
 }
 asio::awaitable< void >
@@ -71,10 +72,10 @@ monitor::mon()
     {
         timer.expires_after(std::chrono::seconds(60));
         co_await timer.async_wait(asio::use_awaitable);
-        fmt::print("monitor::mon:-\n");
+        spdlog::debug("monitor::mon:-");
         for (auto &i : instances_)
         {
-            fmt::print(" - {}\n", i);
+            spdlog::debug(" - {}", i);
         }
     }
 }

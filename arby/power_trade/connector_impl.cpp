@@ -48,7 +48,7 @@ connector_impl::stop()
                        fmt::print("{}::{}\n", classname, "stop");
                        assert(!self->stopped_);
                        self->stopped_ = true;
-                       self->stop_.emit(asio::cancellation_type::terminal);
+                       asioex::terminate(self->stop_);
                    });
 }
 void
@@ -108,45 +108,23 @@ connector_impl::run_connection()
         set_connection_state(error_code());
         send_cv_.cancel();
 
-        auto forward_signal = asio::cancellation_signal();
-
-        auto my_slot = (co_await asio::this_coro::cancellation_state).slot();
-        my_slot.assign(
-            [&](asio::cancellation_type type)
-            {
-                fmt::print("{}::run_connection : stopped!\n", classname);
-                ws.next_layer().next_layer().close();
-                forward_signal.emit(type);
-            });
-        BOOST_SCOPE_EXIT_ALL(&)
         {
-            my_slot.clear();
-        };
-
-        //        auto ic_slot = interrupt_connection_.slot();
-        auto s1 = asioex::scoped_interrupt(interrupt_connection_,
-                                           [&]
-                                           {
-                                               fmt::print("{}::run_connection : interrupted!\n", classname);
-                                               ws.next_layer().next_layer().close();
-                                               asioex::terminate(forward_signal);
-                                           });
-        /*
-                ic_slot.assign(
-                    [&](asio::cancellation_type type)
-                    {
-                        fmt::print("{}::run_connection : interrupted!\n",
-           classname); ws.next_layer().next_layer().close();
-                        forward_signal.emit(type);
-                    });
-                BOOST_SCOPE_EXIT_ALL(&)
+            auto forward_signal    = asio::cancellation_signal();
+            auto forward_interrupt = [&](std::string_view reason)
+            {
+                return [&, reason]
                 {
-                    ic_slot.clear();
+                    fmt::print("{}::run_connection forwarding interrupt: {}", classname, reason);
+                    ws.next_layer().next_layer().close();
+                    asioex::terminate(forward_signal);
                 };
-        */
-        co_await co_spawn(
-            get_executor(), send_loop(ws) || receive_loop(ws), bind_cancellation_slot(forward_signal.slot(), use_awaitable));
+            };
 
+            auto s0 = asioex::scoped_interrupt((co_await asio::this_coro::cancellation_state).slot(), forward_interrupt("stop"));
+            auto s1 = asioex::scoped_interrupt(interrupt_connection_, forward_interrupt("interrupt"));
+            co_await co_spawn(
+                get_executor(), send_loop(ws) || receive_loop(ws), bind_cancellation_slot(forward_signal.slot(), use_awaitable));
+        }
         set_connection_state(asio::error::not_connected);
     }
     catch (boost::system::system_error &se)
@@ -241,12 +219,6 @@ connector_impl::receive_loop(ws_stream &ws)
     using asio::redirect_error;
     using asio::use_awaitable;
 
-    auto now     = std::chrono::system_clock::now();
-    auto fname   = fmt::format("connector-{}.log", now);
-    auto logpath = fs::temp_directory_path() / fs::path(fname);
-    fmt::print("logging to {}\n", logpath.string());
-    logfile_.open(logpath.native());
-
     try
     {
         error_code         ec;
@@ -264,8 +236,6 @@ connector_impl::receive_loop(ws_stream &ws)
             auto now = std::chrono::system_clock::now();
 
             auto data = boost::string_view(static_cast< char const * >(buf.data().data()), buf.data().size());
-
-            logfile_ << data << '\n';
 
             auto handled = handle_message_data(data, ec);
             if (ec)

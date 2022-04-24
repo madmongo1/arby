@@ -11,7 +11,9 @@
 #include "config/websocket.hpp"
 #include "power_trade/connector.hpp"
 #include "power_trade/event_listener.hpp"
+#include "power_trade/native_symbol.hpp"
 #include "power_trade/orderbook_listener_impl.hpp"
+#include "trading/market_key.hpp"
 #include "util/monitor.hpp"
 
 #include <boost/asio.hpp>
@@ -25,6 +27,7 @@
 #include <fmt/chrono.h>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
+#include <spdlog/spdlog.h>
 #include <util/truncate.hpp>
 
 #include <cassert>
@@ -38,12 +41,6 @@ namespace fs = boost::filesystem;
 using namespace arby;
 
 std::string progname;
-
-enum trade_side
-{
-    buy,
-    sell
-};
 
 #include <termios.h>
 
@@ -106,8 +103,8 @@ check(ssl::context &sslctx)
     auto con      = std::make_shared< power_trade::connector >(this_exec, sslctx);
 
     auto watch1 = power_trade::event_listener::create(con, "heartbeat");
-    auto watch2 = power_trade::orderbook_listener_impl::create(this_exec, con, "ETH-USD");
-    auto watch3 = power_trade::orderbook_listener_impl::create(this_exec, con, "BTC-USD");
+    auto watch2 = power_trade::orderbook_listener_impl::create(this_exec, con, trading::spot_key("eth/usd"));
+    auto watch3 = power_trade::orderbook_listener_impl::create(this_exec, con, trading::spot_key("btc-usd"));
 
     asio::cancellation_signal cancel_sig;
     co_await monitor_quit(cancel_sig, *con);
@@ -133,6 +130,9 @@ main(int argc, char **argv)
 
     auto arg0 = fs::path(argv[0]);
     progname  = arg0.stem().string();
+
+    spdlog::set_level(spdlog::level::debug);
+    fmt::print("{}: starting\n", progname);
 
     try
     {

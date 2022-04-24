@@ -15,6 +15,14 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(fmtlib)
 
 FetchContent_Declare(
+  spdlog
+  GIT_REPOSITORY https://github.com/gabime/spdlog.git
+  GIT_TAG        v1.10.0
+)
+set(SPDLOG_FMT_EXTERNAL ON)
+FetchContent_MakeAvailable(spdlog)
+
+FetchContent_Declare(
   wise_enum_dep
   GIT_REPOSITORY https://github.com/quicknir/wise_enum.git
   GIT_TAG        master

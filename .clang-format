@@ -95,7 +95,7 @@ KeepEmptyLinesAtTheStartOfBlocks: false
 MacroBlockBegin: 'reenter\s(.*)'
 MacroBlockEnd:   ''
 MaxEmptyLinesToKeep: 1
-NamespaceIndentation: Inner
+NamespaceIndentation: None
 ObjCBinPackProtocolList: Auto
 ObjCBlockIndentWidth: 4
 ObjCSpaceAfterProperty: false

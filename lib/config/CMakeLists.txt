@@ -8,4 +8,6 @@ target_link_libraries(arby_config PUBLIC
         Boost::system Boost::thread Boost::container
         Threads::Threads
         OpenSSL::SSL OpenSSL::Crypto
-        WiseEnum::wise_enum)
+        WiseEnum::wise_enum
+        fmt::fmt
+        spdlog::spdlog)

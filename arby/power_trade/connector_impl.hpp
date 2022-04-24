@@ -20,7 +20,6 @@
 #include <boost/unordered_map.hpp>
 
 #include <deque>
-#include <fstream>
 #include <functional>
 #include <iosfwd>
 #include <tuple>
@@ -270,7 +269,6 @@ struct connector_impl
     asio::cancellation_signal interrupt_connection_;
     asio::cancellation_signal stop_;
     bool                      stopped_ = false;
-    std::ofstream             logfile_;
 };
 }   // namespace arby::power_trade
 
