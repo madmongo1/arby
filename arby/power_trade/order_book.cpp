@@ -263,4 +263,21 @@ order_book::reset()
     bids_.clear();
     bid_cache_.clear();
 }
+
+std::string
+order_book::top_bid_str() const
+{
+    if (bids_.empty())
+        return "";
+    return fmt::format("{}@{}", bids_.begin()->second.aggregate_depth, bids_.begin()->first);
+}
+
+std::string
+order_book::top_offer_str() const
+{
+    if (offers_.empty())
+        return "";
+    return fmt::format("{}@{}", offers_.begin()->second.aggregate_depth, offers_.begin()->first);
+}
+
 }   // namespace arby::power_trade

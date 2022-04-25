@@ -48,6 +48,11 @@ struct level_data
 
 struct order_book
 {
+    std::string
+    top_bid_str() const;
+    std::string
+    top_offer_str() const;
+
     void
     add(json::string const                   &order_id,
         trading::price_type                   price,

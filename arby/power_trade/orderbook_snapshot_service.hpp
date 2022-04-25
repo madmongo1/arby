@@ -24,8 +24,11 @@ struct orderbook_snapshot : trading::feed_snapshot
 {
     std::uint64_t generation = 0;
     std::uint64_t sequence   = 0;
-
     order_book book;
+
+  protected:
+    void
+    print_impl(std::ostream &os) const override;
 };
 
 struct orderbook_snapshot_service

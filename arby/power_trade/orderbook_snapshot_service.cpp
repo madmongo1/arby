@@ -9,6 +9,9 @@
 
 #include "orderbook_snapshot_service.hpp"
 
+#include <fmt/format.h>
+#include <fmt/ostream.h>
+
 namespace arby
 {
 namespace power_trade
@@ -131,5 +134,11 @@ orderbook_snapshot_service::deallocate_snapshot(std::unique_ptr< orderbook_snaps
     free_snaps_.push_back(std::move(snap));
 }
 
+void
+orderbook_snapshot::print_impl(std::ostream &os) const
+{
+    feed_snapshot::print_impl(os);
+    fmt::print(os, "[generation {}][sequence {}][TOB {}/{}]", generation, sequence, book.top_bid_str(), book.top_offer_str());
+}
 }   // namespace power_trade
 }   // namespace arby
