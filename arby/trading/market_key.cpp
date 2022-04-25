@@ -8,6 +8,7 @@
 //
 
 #include "market_key.hpp"
+#include <iostream>
 
 namespace arby::trading
 {
