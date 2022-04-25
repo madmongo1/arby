@@ -10,9 +10,12 @@
 #ifndef ARBY_ARBY_POWER_TRADE_ORDERBOOK_LISTENER_IMPL_HPP
 #define ARBY_ARBY_POWER_TRADE_ORDERBOOK_LISTENER_IMPL_HPP
 
+#include "config/signals.hpp"
 #include "power_trade/connector.hpp"
 #include "power_trade/native_symbol.hpp"
 #include "power_trade/order_book.hpp"
+#include "power_trade/orderbook_snapshot_service.hpp"
+#include "power_trade/tick_history.hpp"
 #include "trading/aggregate_book_feed.hpp"
 #include "trading/market_key.hpp"
 
@@ -36,11 +39,17 @@ namespace power_trade
 /// emitted from the connector must be marshalled onto our own executor via
 /// POST. This also separates the processing of our data from the io loop.
 struct orderbook_listener_impl
-: virtual util::has_executor_base
-, trading::implement_aggregate_book_feed< orderbook_listener_impl >
+: util::has_executor_base
 , std::enable_shared_from_this< orderbook_listener_impl >
 {
     static constexpr char classname[] = "orderbook_listener_impl";
+
+    using executor_type  = asio::any_io_executor;
+    using snapshot_class = orderbook_snapshot;
+    using snapshot_type  = std::shared_ptr< snapshot_class const >;
+
+    using signal_type = typename sigs::signal_type< void(snapshot_type), sigs::keywords::mutex_type< sigs::dummy_mutex > >::type;
+    using slot_type   = signal_type::slot_type;
 
     static std::shared_ptr< orderbook_listener_impl >
     create(asio::any_io_executor exec, std::shared_ptr< connector > connector, trading::market_key symbol);
@@ -50,29 +59,13 @@ struct orderbook_listener_impl
     void
     start();
 
+    void
+    stop();
+
+    std::tuple< sigs::connection, snapshot_type >
+    subscribe(slot_type slot);
+
   private:
-    struct command_response
-    {
-        std::shared_ptr< json::object const > payload;
-    };
-
-    struct orderbook_snapshot
-    {
-        std::shared_ptr< json::object const > payload;
-    };
-
-    struct orderbook_add
-    {
-        std::shared_ptr< json::object const > payload;
-    };
-
-    struct orderbook_remove
-    {
-        std::shared_ptr< json::object const > payload;
-    };
-
-    using message = boost::variant2::variant< orderbook_snapshot, orderbook_add, orderbook_remove >;
-
     asio::awaitable< void >
     run(std::shared_ptr< orderbook_listener_impl > self);
 
@@ -94,23 +87,20 @@ struct orderbook_listener_impl
     on_add(json::object const &payload);
     void
     on_remove(json::object const &payload);
+    void
+    on_execute(json::object const &payload);
 
     static void
     _handle_command_response(std::weak_ptr< orderbook_listener_impl > weak, std::shared_ptr< json::object const > payload);
 
     static void
-    _handle_message(std::weak_ptr< orderbook_listener_impl > weak, message const message);
+    _handle_tick(std::weak_ptr< orderbook_listener_impl > weak, std::shared_ptr< json::object const > payload, tick_code code);
+
     void
-    handle_message(message payload);
+    on_tick(tick_record tick);
 
-    static void
-    _handle_snapshot(std::weak_ptr< orderbook_listener_impl > weak, std::shared_ptr< json::object const > payload);
-
-    static void
-    _handle_add(std::weak_ptr< orderbook_listener_impl > weak, std::shared_ptr< json::object const > payload);
-
-    static void
-    _handle_remove(std::weak_ptr< orderbook_listener_impl > weak, std::shared_ptr< json::object const > payload);
+    void
+    update();
 
     std::array< std::tuple< json::string, json::string >, 2 >
     make_message_filter() const
@@ -120,20 +110,29 @@ struct orderbook_listener_impl
         return result;
     }
 
+    std::string
+    build_source_id() const;
+
     trading::market_key const symbol_;
     json::string const        my_subscribe_id_ = build_subscribe_id();
+    std::string const         source_id_       = build_source_id();
 
     std::shared_ptr< connector > connector_;
     connection_state             connstate_;
 
     util::cross_executor_connection connection_state_conn_;
-    util::cross_executor_connection cmd_response_conn_, snapshot_conn_, add_conn_, remove_conn_;
+    util::cross_executor_connection cmd_response_conn_;
+    util::cross_executor_connection tick_con_[4];
 
     asio::cancellation_signal stop_monitoring_books_;
 
-    asio::experimental::channel< void(error_code, message) > msg_channel_ { get_executor() };
+    orderbook_snapshot_service        snapshot_service_;
+    std::shared_ptr< snapshot_class > snapshot_;
+    signal_type                       signal_;
 
-    order_book order_book_;
+    // data for building the snapshot
+    trading::feed_condition connection_condition_;
+    trading::feed_condition book_condition_;
 };
 
 }   // namespace power_trade

@@ -11,6 +11,7 @@
 #define ARBY_ARBY_POWER_TRADE_ORDERBOOK_LISTENER_HPP
 
 #include "power_trade/orderbook_listener_impl.hpp"
+#include "trading/market_key.hpp"
 
 namespace arby
 {
@@ -19,7 +20,19 @@ namespace power_trade
 
     struct orderbook_listener
     {
-        orderbook_listener(asio::any_io_executor exec, std::shared_ptr<connector> connector, json::string symbol);
+        using impl_class = orderbook_listener_impl;
+        using impl_type = std::shared_ptr<impl_class>;
+        using executor_type = impl_class::executor_type;
+        using snapshot_class = impl_class::snapshot_class;
+        using snapshot_type = impl_class::snapshot_type;
+        static constexpr char classname[] = "power_trade::orderbook_listener";
+
+        orderbook_listener(asio::any_io_executor exec, std::shared_ptr<connector> connector, trading::market_key market);
+
+        executor_type const& get_executor() const { return impl_->get_executor(); }
+
+      private:
+        impl_type impl_;
     };
 
 }   // namespace power_trade

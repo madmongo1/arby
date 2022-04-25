@@ -20,12 +20,30 @@
 
 namespace arby::power_trade
 {
+struct order_qty
+{
+    json::string      orderid;
+    trading::qty_type qty;
+
+    friend bool
+    operator==(order_qty const &l, order_qty const &r)
+    {
+        return l.orderid == r.orderid && l.qty == r.qty;
+    }
+};
+
 struct level_data
 {
-    using qty_list = std::list< trading::qty_type >;
+    using qty_list = std::list< order_qty >;
 
     trading::qty_type aggregate_depth { 0 };
     qty_list          orders {};
+
+    friend bool
+    operator==(level_data const &l, level_data const &r)
+    {
+        return l.aggregate_depth == r.aggregate_depth && l.orders == r.orders;
+    }
 };
 
 struct order_book
@@ -41,7 +59,16 @@ struct order_book
     remove(json::string const &order_id, trading::side_type side, std::chrono::system_clock::time_point timestamp);
 
     void
+    execute(json::string const                   &order_id,
+            trading::side_type                    side,
+            trading::qty_type                     qty,
+            std::chrono::system_clock::time_point timestamp);
+
+    void
     reset();
+
+    friend bool
+    operator==(order_book const &l, order_book const &r);
 
     friend std::ostream &
     operator<<(std::ostream &os, order_book const &book);
@@ -61,6 +88,40 @@ struct order_book
     bid_ladder        bids_;
     bid_order_cache   bid_cache_;
     trading::qty_type aggregate_bids_;
+
+    order_book &
+    operator=(order_book const &r)
+    {
+        offers_           = r.offers_;
+        aggregate_offers_ = r.aggregate_offers_;
+        bids_             = r.bids_;
+        aggregate_bids_   = r.aggregate_bids_;
+        last_update_      = r.last_update_;
+
+        // now rebuild the indexes
+
+        for (auto iladder = bids_.begin(); iladder != bids_.end(); ++iladder)
+        {
+            auto &[price, detail] = *iladder;
+            for (auto iqty = detail.orders.begin(); iqty != detail.orders.end(); ++iqty)
+            {
+                auto &[orderid, qty] = *iqty;
+                bid_cache_.emplace(orderid, std::make_tuple(iladder, iqty));
+            }
+        }
+
+        for (auto iladder = offers_.begin(); iladder != offers_.end(); ++iladder)
+        {
+            auto &[price, detail] = *iladder;
+            for (auto iqty = detail.orders.begin(); iqty != detail.orders.end(); ++iqty)
+            {
+                auto &[orderid, qty] = *iqty;
+                offer_cache_.emplace(orderid, std::make_tuple(iladder, iqty));
+            }
+        }
+
+        return *this;
+    }
 };
 
 }   // namespace arby::power_trade

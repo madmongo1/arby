@@ -9,9 +9,33 @@
 
 #include "feed_snapshot.hpp"
 
+#include <fmt/chrono.h>
+#include <fmt/format.h>
+#include <fmt/ostream.h>
+#include <fmt/ranges.h>
+
 namespace arby
 {
 namespace trading
 {
+
+void
+feed_snapshot::print(std::ostream &os) const
+{
+    fmt::print(os,
+               "[condition {}][source {}][timestamp {}][upstream_time {}]",
+               this->condition,
+               source,
+               this->timestamp,
+               this->upstream_time);
+    this->print_impl(os);
+    fmt::print(os, "[parents {}]", this->parents_);
+}
+
+void
+feed_snapshot::print_impl(std::ostream &) const
+{
+}
+
 }   // namespace trading
 }   // namespace arby

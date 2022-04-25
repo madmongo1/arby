@@ -139,9 +139,33 @@ truncate(boost::string_view sv, std::size_t limit)
     return truncate_op(std::string_view(sv.data(), sv.size()), limit);
 }
 
-std::string to_string(truncate_op const& op)
+std::string
+to_string(truncate_op const &op)
 {
     return { op.sv_.begin(), op.sv_.end() };
 }
 
+json_truncate_op::json_truncate_op(const json::object &o, std::size_t limit)
+: o(o)
+, limit(std::max(std::size_t(3), limit))
+{
+}
+
+std::ostream &
+operator<<(std::ostream &os, const json_truncate_op &op)
+{
+    auto s = json::serialize(op.o);
+    if (s.length() > op.limit)
+    {
+        s.resize(op.limit - 3);
+        s.append(3, '.');
+    }
+    return os << s;
+}
+
+json_truncate_op
+truncate(json::object const &j, std::size_t limit)
+{
+    return json_truncate_op(j, limit);
+}
 }   // namespace arby::util

@@ -137,8 +137,7 @@ order_book::add(const json::string                   &order_id,
                 trading::side_type                    side,
                 std::chrono::system_clock::time_point timestamp)
 {
-    if (timestamp < last_update_)
-        throw std::runtime_error("updates out of order");
+    last_update_ = std::max(last_update_, timestamp);
 
     if (side == trading::buy)
     {
@@ -147,7 +146,7 @@ order_book::add(const json::string                   &order_id,
             ilevel = bids_.emplace(price, level_data()).first;
         auto &detail = ilevel->second;
         detail.aggregate_depth += quantity;
-        auto iqty            = detail.orders.insert(detail.orders.end(), quantity);
+        auto iqty            = detail.orders.insert(detail.orders.end(), order_qty { .orderid = order_id, .qty = quantity });
         bid_cache_[order_id] = std::make_tuple(ilevel, iqty);
         aggregate_bids_ += quantity;
     }
@@ -158,7 +157,7 @@ order_book::add(const json::string                   &order_id,
             ilevel = offers_.emplace(price, level_data()).first;
         auto &detail = ilevel->second;
         detail.aggregate_depth += quantity;
-        auto iqty              = detail.orders.insert(detail.orders.end(), quantity);
+        auto iqty              = detail.orders.insert(detail.orders.end(), order_qty { .orderid = order_id, .qty = quantity });
         offer_cache_[order_id] = std::make_tuple(ilevel, iqty);
         aggregate_offers_ += quantity;
     }
@@ -178,8 +177,8 @@ order_book::remove(const json::string &order_id, trading::side_type side, std::c
             return;
         auto &[ilevel, iqty] = icache->second;
         auto &detail         = ilevel->second;
-        detail.aggregate_depth -= *iqty;
-        aggregate_bids_ -= *iqty;
+        detail.aggregate_depth -= iqty->qty;
+        aggregate_bids_ -= iqty->qty;
         detail.orders.erase(iqty);
         if (detail.orders.empty())
             bids_.erase(ilevel);
@@ -192,8 +191,8 @@ order_book::remove(const json::string &order_id, trading::side_type side, std::c
             return;
         auto &[ilevel, iqty] = icache->second;
         auto &detail         = ilevel->second;
-        detail.aggregate_depth -= *iqty;
-        aggregate_offers_ -= *iqty;
+        detail.aggregate_depth -= iqty->qty;
+        aggregate_offers_ -= iqty->qty;
         detail.orders.erase(iqty);
         if (detail.orders.empty())
             offers_.erase(ilevel);
@@ -202,6 +201,59 @@ order_book::remove(const json::string &order_id, trading::side_type side, std::c
 
     last_update_ = timestamp;
 }
+
+bool
+operator==(order_book const &l, order_book const &r)
+{
+    return l.last_update_ == r.last_update_ && l.aggregate_bids_ == r.aggregate_bids_ &&
+           l.aggregate_offers_ == r.aggregate_offers_ && l.offers_ == r.offers_ && l.bids_ == r.bids_;
+}
+
+void
+order_book::execute(json::string const                   &order_id,
+                    trading::side_type                    side,
+                    trading::qty_type                     qty,
+                    std::chrono::system_clock::time_point timestamp)
+{
+    if (timestamp < last_update_)
+        throw std::runtime_error("updates out of order");
+
+    if (side == trading::buy)
+    {
+        auto icache = bid_cache_.find(order_id);
+        if (icache == bid_cache_.end())
+            return;
+        auto &[ilevel, iqty] = icache->second;
+        auto &detail         = ilevel->second;
+        if (iqty->qty -= qty == 0)
+        {
+            detail.orders.erase(iqty);
+            bid_cache_.erase(order_id);
+            if (detail.orders.empty())
+                bids_.erase(ilevel->first);
+        }
+        aggregate_bids_ -= qty;
+    }
+    else
+    {
+        auto icache = offer_cache_.find(order_id);
+        if (icache == offer_cache_.end())
+            return;
+        auto &[ilevel, iqty] = icache->second;
+        auto &detail         = ilevel->second;
+        if (iqty->qty -= qty == 0)
+        {
+            detail.orders.erase(iqty);
+            offer_cache_.erase(order_id);
+            if (detail.orders.empty())
+                offers_.erase(ilevel->first);
+        }
+        aggregate_bids_ -= qty;
+    }
+
+    last_update_ = timestamp;
+}
+
 void
 order_book::reset()
 {

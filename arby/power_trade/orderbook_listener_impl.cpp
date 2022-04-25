@@ -9,9 +9,11 @@
 
 #include "orderbook_listener_impl.hpp"
 
+#include "asioex/helpers.hpp"
 #include "util/monitor.hpp"
 
 #include <fmt/ostream.h>
+#include <spdlog/spdlog.h>
 #include <util/truncate.hpp>
 
 #include <functional>
@@ -27,15 +29,16 @@ void
 orderbook_listener_impl::on_connection_state(connection_state cstate)
 {
     connstate_ = cstate;
-    fmt::print("{}::{} {}\n", classname, __func__, cstate);
+    spdlog::info("{}::{} {}", this->source_id_, __func__, cstate);
     if (connstate_.down())
     {
-        stop_monitoring_books_.emit(asio::cancellation_type::terminal);
-        msg_channel_.reset();
+        connection_condition_.reset(trading::feed_state::stale);
+        connection_condition_.errors.push_back("connection dropped");
+        book_condition_.merge(trading::feed_state::stale);
     }
     else
     {
-        order_book_.reset();
+        connection_condition_.reset(trading::feed_state::good);
         auto req = json::value({ { "subscribe",
                                    { { "market_id", "0" },
                                      { "symbol", native_symbol(symbol_) },
@@ -44,6 +47,7 @@ orderbook_listener_impl::on_connection_state(connection_state cstate)
                                      { "user_tag", my_subscribe_id_ } } } });
         connector_->send(json::serialize(req));
     }
+    update();
 }
 
 std::shared_ptr< orderbook_listener_impl >
@@ -61,6 +65,15 @@ orderbook_listener_impl::orderbook_listener_impl(asio::any_io_executor        ex
 , connector_(std::move(connector))
 , symbol_(std::move(symbol))
 {
+    connection_condition_.state = trading::feed_state::not_ready;
+    connection_condition_.errors.push_back("connection state unknown");
+    book_condition_.state = trading::feed_state::not_ready;
+    book_condition_.errors.push_back("no book");
+
+    snapshot_ = std::make_shared< orderbook_snapshot >();
+    snapshot_->condition.merge(connection_condition_);
+    snapshot_->condition.merge(book_condition_);
+    snapshot_->source = source_id_;
 }
 
 void
@@ -115,20 +128,28 @@ orderbook_listener_impl::run(std::shared_ptr< orderbook_listener_impl > self)
     cmd_response_conn_ = co_await connector_->watch_messages(
         "command_response", std::bind(&orderbook_listener_impl::_handle_command_response, weak_from_this(), std::placeholders::_1));
 
-    snapshot_conn_ = co_await connector_->watch_messages(
+    tick_con_[0] = co_await connector_->watch_messages(
         "snapshot",
-        filter_message(std::bind(&orderbook_listener_impl::_handle_snapshot, weak_from_this(), std::placeholders::_1),
-                       make_message_filter()));
+        filter_message(
+            std::bind(&orderbook_listener_impl::_handle_tick, weak_from_this(), std::placeholders::_1, tick_code::snapshot),
+            make_message_filter()));
 
-    remove_conn_ = co_await connector_->watch_messages(
-        "order_deleted",
-        filter_message(std::bind(&orderbook_listener_impl::_handle_remove, weak_from_this(), std::placeholders::_1),
-                       make_message_filter()));
-
-    add_conn_ = co_await connector_->watch_messages(
+    tick_con_[1] = co_await connector_->watch_messages(
         "order_added",
-        filter_message(std::bind(&orderbook_listener_impl::_handle_add, weak_from_this(), std::placeholders::_1),
+        filter_message(std::bind(&orderbook_listener_impl::_handle_tick, weak_from_this(), std::placeholders::_1, tick_code::add),
                        make_message_filter()));
+
+    tick_con_[2] = co_await connector_->watch_messages(
+        "order_deleted",
+        filter_message(
+            std::bind(&orderbook_listener_impl::_handle_tick, weak_from_this(), std::placeholders::_1, tick_code::remove),
+            make_message_filter()));
+
+    tick_con_[3] = co_await connector_->watch_messages(
+        "order_executed",
+        filter_message(
+            std::bind(&orderbook_listener_impl::_handle_tick, weak_from_this(), std::placeholders::_1, tick_code::execute),
+            make_message_filter()));
 
     connection_state_conn_ = std::move(conn);
     on_connection_state(connstate);
@@ -138,7 +159,7 @@ void
 orderbook_listener_impl::_handle_command_response(std::weak_ptr< orderbook_listener_impl > weak,
                                                   std::shared_ptr< json::object const >    payload)
 {
-    fmt::print("{}::{}({})\n", classname, __func__, *payload);
+    spdlog::trace("{}::{}({})", classname, __func__, *payload);
     auto self = weak.lock();
     if (!self)
         return;
@@ -155,49 +176,6 @@ orderbook_listener_impl::_handle_command_response(std::weak_ptr< orderbook_liste
     }
 }
 
-void
-orderbook_listener_impl::_handle_message(std::weak_ptr< orderbook_listener_impl > weak, message msg)
-{
-    /*
-    fmt::print("{}::{}({})\n",
-               classname,
-               __func__,
-               util::truncate(json::serialize(*payload)));
-               */
-    if (auto self = weak.lock())
-        asio::post(
-            asio::bind_executor(self->get_executor(), std::bind(&orderbook_listener_impl::handle_message, self, std::move(msg))));
-}
-
-void
-orderbook_listener_impl::handle_message(message msg)
-{
-    if (!msg_channel_.try_send(error_code(), std::move(msg)))
-    {
-        msg_channel_.async_send(error_code(), std::move(msg), [self = shared_from_this()](error_code) {});
-    }
-}
-
-void
-orderbook_listener_impl::_handle_snapshot(std::weak_ptr< orderbook_listener_impl > weak,
-                                          std::shared_ptr< json::object const >    payload)
-{
-    _handle_message(weak, orderbook_snapshot { .payload = payload });
-}
-
-void
-orderbook_listener_impl::_handle_add(std::weak_ptr< orderbook_listener_impl > weak, std::shared_ptr< json::object const > payload)
-{
-    _handle_message(weak, orderbook_add { .payload = payload });
-}
-
-void
-orderbook_listener_impl::_handle_remove(std::weak_ptr< orderbook_listener_impl > weak,
-                                        std::shared_ptr< json::object const >    payload)
-{
-    _handle_message(weak, orderbook_remove { .payload = payload });
-}
-
 json::string
 orderbook_listener_impl::build_subscribe_id() const
 {
@@ -208,125 +186,82 @@ orderbook_listener_impl::build_subscribe_id() const
 void
 orderbook_listener_impl::on_command_response(std::shared_ptr< json::object const > payload)
 {
-    fmt::print("{}::{}({})\n", classname, __func__, *payload);
-
-    using asio::bind_cancellation_slot;
-    using asio::co_spawn;
-    using asio::detached;
+    spdlog::trace("{}::{}({})", classname, __func__, util::truncate(*payload));
 
     if (auto &code = payload->at("error_code"); code == "0")
     {
-        msg_channel_.reset();
-        // start running the order book monitor
-
-        co_spawn(
-            get_executor(),
-            [this]() { return monitor_book_messages(shared_from_this()); },
-            bind_cancellation_slot(stop_monitoring_books_.slot(), detached));
+        book_condition_.reset(trading::not_ready);
+        book_condition_.errors.push_back("subscribed");
     }
     else
     {
-        // error mode
+        book_condition_.reset(trading::error);
+        book_condition_.errors.push_back("failed to subscribe");
     }
+    update();
 }
 
-asio::awaitable< void >
-orderbook_listener_impl::monitor_book_messages(std::shared_ptr< orderbook_listener_impl > self)
+void
+orderbook_listener_impl::_handle_tick(std::weak_ptr< orderbook_listener_impl > weak,
+                                      std::shared_ptr< const json::object >    payload,
+                                      tick_code                                code)
 {
-    using asio::use_awaitable;
-
-    auto last_update = std::chrono::system_clock::time_point::min();
-
-    auto sentinel = util::monitor::record(fmt::format("{}[{}]::{}", classname, symbol_, __func__));
-
-    auto actual_op = [this](message const &which)
+    auto self = weak.lock();
+    if (!self)
     {
-        if (holds_alternative< orderbook_snapshot >(which))
-            on_snapshot(*get< orderbook_snapshot >(which).payload);
-        else if (holds_alternative< orderbook_add >(which))
-            on_add(*get< orderbook_add >(which).payload);
-        else if (holds_alternative< orderbook_remove >(which))
-            on_remove(*get< orderbook_remove >(which).payload);
-    };
-    for (;;)
-    {
-        error_code err;
-        bool       received = false;
-        do
-        {
-            auto op = [&](error_code ec, message const &which)
-            {
-                err = ec;
-                if (!err.failed())
-                    actual_op(which);
-            };
-            received = msg_channel_.try_receive(op);
-            if (err.failed())
-                throw system_error(err);
-        } while (received);
+        spdlog::trace("{}::{} weak pointer expired, dropping tick: {} {}", classname, __func__, code, util::truncate(*payload));
+        return;
+    }
 
-        if (order_book_.last_update_ > last_update)
+    try
+    {
+        asio::dispatch(asio::bind_executor(self->get_executor(),
+                                           [self, tick = tick_record { .payload = payload, .code = code }]() mutable
+                                           { self->on_tick(std::move(tick)); }));
+    }
+    catch (std::exception &e)
+    {
+        spdlog::error("{}[{}]::{} exception: {}", classname, self->symbol_, __func__, e.what());
+    }
+}
+void
+orderbook_listener_impl::on_tick(tick_record tick)
+{
+    auto deleter = [weak = weak_from_this()](orderbook_snapshot *psnap) noexcept
+    {
+        auto up = std::unique_ptr< orderbook_snapshot >(psnap);
+        if (auto self = weak.lock())
         {
-            last_update = order_book_.last_update_;
-            fmt::print("{}[{}]::{} orderbook:\n{}\n", classname, symbol_, __func__, order_book_);
+            asio::dispatch(asio::bind_executor(self->get_executor(),
+                                               [self, up = std::move(up)]() mutable
+                                               { self->snapshot_service_.deallocate_snapshot(std::move(up)); }));
         }
+    };
+    snapshot_ = std::shared_ptr< orderbook_snapshot >(snapshot_service_.process_tick(std::move(tick)).release(), deleter);
 
-        auto which = co_await msg_channel_.async_receive(use_awaitable);
-        actual_op(which);
-    }
+    book_condition_.reset(trading::good);
+    update();
+}
+
+auto
+orderbook_listener_impl::subscribe(slot_type slot) -> std::tuple< sigs::connection, snapshot_type >
+{
+    assert(asioex::on_correct_thread(get_executor()));
+    return std::make_tuple(signal_.connect(std::move(slot)), snapshot_);
+}
+std::string
+orderbook_listener_impl::build_source_id() const
+{
+    return fmt::format("{}[{}]", classname, symbol_);
 }
 
 void
-orderbook_listener_impl::on_snapshot(json::object const &payload)
+orderbook_listener_impl::update()
 {
-    fmt::print("{}::{}({})\n", classname, __func__, util::truncate(json::serialize(payload)));
-
-    auto timestamp = std::chrono::system_clock::time_point(
-        std::chrono::microseconds(::atol(payload.at("server_utc_timestamp").as_string().c_str())));
-
-    auto &buys = payload.at("buy").as_array();
-    for (auto &v : buys)
-    {
-        auto &obuy = v.as_object();
-        order_book_.add(obuy.at("orderid").as_string(),
-                        trading::price_type(obuy.at("price").as_string().c_str()),
-                        trading::qty_type(obuy.at("quantity").as_string().c_str()),
-                        trading::buy,
-                        timestamp);
-    }
-
-    auto &sells = payload.at("sell").as_array();
-    for (auto &v : sells)
-    {
-        auto &osell = v.as_object();
-        order_book_.add(osell.at("orderid").as_string(),
-                        trading::price_type(osell.at("price").as_string().c_str()),
-                        trading::qty_type(osell.at("quantity").as_string().c_str()),
-                        trading::sell,
-                        timestamp);
-    }
-}
-void
-orderbook_listener_impl::on_add(json::object const &payload)
-{
-    fmt::print("{}::{}({})\n", classname, __func__, util::truncate(json::serialize(payload)));
-
-    auto side  = wise_enum::from_string< trading::side_type >(payload.at("side").as_string());
-    auto qty   = trading::qty_type(payload.at("quantity").as_string().c_str());
-    auto price = trading::price_type(payload.at("price").as_string().c_str());
-    auto tsval = ::atoll(payload.at("server_utc_timestamp").as_string().c_str());
-
-    auto timestamp = std::chrono::system_clock::time_point(std::chrono::microseconds(tsval));
-    order_book_.add(payload.at("order_id").as_string(), price, qty, side.value(), timestamp);
-}
-void
-orderbook_listener_impl::on_remove(json::object const &payload)
-{
-    fmt::print("{}::{}({})\n", classname, __func__, util::truncate(json::serialize(payload)));
-    auto side      = wise_enum::from_string< trading::side_type >(payload.at("side").as_string());
-    auto timestamp = std::chrono::system_clock::time_point(
-        std::chrono::microseconds(::atoll(payload.at("server_utc_timestamp").as_string().c_str())));
-    order_book_.remove(payload.at("order_id").as_string(), side.value(), timestamp);
+    snapshot_->condition.reset(trading::good);
+    snapshot_->condition.merge(connection_condition_);
+    snapshot_->condition.merge(book_condition_);
+    signal_(snapshot_);
 }
 
 }   // namespace power_trade

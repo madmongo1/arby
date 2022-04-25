@@ -7,6 +7,8 @@
 // Official repository: https://github.com/madmongo1/arby
 //
 
+#include "config/json.hpp"
+
 #include <boost/utility/string_view_fwd.hpp>
 
 #include <list>
@@ -80,7 +82,8 @@ struct truncate_op : truncate_op_base
     friend std::ostream &
     operator<<(std::ostream &os, truncate_op const &op);
 
-    friend std::string to_string(truncate_op const& op);
+    friend std::string
+    to_string(truncate_op const &op);
 
   private:
     std::string_view sv_;
@@ -94,5 +97,19 @@ truncate(std::string const &s, std::size_t limit = 256);
 
 truncate_op
 truncate(boost::string_view sv, std::size_t limit = 256);
+
+struct json_truncate_op
+{
+    json_truncate_op(json::object const &o, std::size_t limit);
+
+    friend std::ostream &
+    operator<<(std::ostream &os, json_truncate_op const &op);
+
+    json::object const &o;
+    std::size_t         limit;
+};
+
+json_truncate_op
+truncate(json::object const &j, std::size_t limit = 256);
 
 }   // namespace arby::util

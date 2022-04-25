@@ -26,10 +26,19 @@ operator>>(std::istream &is, feed_state &arg);
 
 struct feed_condition
 {
-    feed_state                 state;
-    timestamp_type             upstream_timestamp, timestamp;
-    std::vector< std::string > messages;
+    feed_state                 state = feed_state::not_ready;
+    std::vector< std::string > errors;
+
+    /// @brief update this condition with the error information in the other
+    /// @param r reference to other condition
+    void
+    merge(feed_condition const &r);
+
+    void merge(feed_state s);
+
+    void reset(feed_state s = feed_state::good);
 };
+
 std::ostream &
 operator<<(std::ostream &os, feed_condition arg);
 
