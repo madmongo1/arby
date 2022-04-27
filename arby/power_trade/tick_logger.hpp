@@ -29,10 +29,7 @@ struct tick_logger
     {
         using executor_type = connector::executor_type;
 
-        static std::shared_ptr< impl >
-        create(std::shared_ptr< connector > connector, json::string const &symbol, fs::path path);
-
-        impl(std::shared_ptr< connector > connector);
+        impl(std::shared_ptr< connector > connector, std::string symbol, fs::path path);
 
         impl(impl const &) = delete;
 
@@ -40,7 +37,7 @@ struct tick_logger
         operator=(impl const &) = delete;
 
         void
-        start(json::string const &primary);
+        start();
 
         void
         stop();
@@ -56,18 +53,21 @@ struct tick_logger
         on_connection_state(connection_state stat);
 
         void
-        on_message(std::shared_ptr< json::object const > const &pmessage);
+        on_message(std::string_view type, std::shared_ptr< json::object const > const &pmessage);
+
+        static void
+        _on_message(std::weak_ptr< impl > weak, std::string_view type, std::shared_ptr< json::object const > const &pmessage);
 
       private:
         std::shared_ptr< connector >           connector_;
         std::vector< sigs::scoped_connection > persistent_connections_;
-        json::string                           symbol_;
+        std::string                            symbol_;
         logging::data_log                      logger_;
     };
 
     using executor_type = impl::executor_type;
 
-    tick_logger(std::shared_ptr< connector > connector, json::string const &primary);
+    tick_logger(std::shared_ptr< connector > connector, std::string symbol, fs::path path);
     tick_logger(tick_logger &&other);
     tick_logger &
     operator=(tick_logger &&other);

@@ -13,6 +13,7 @@
 #include "power_trade/event_listener.hpp"
 #include "power_trade/native_symbol.hpp"
 #include "power_trade/orderbook_listener_impl.hpp"
+#include "power_trade/tick_logger.hpp"
 #include "trading/market_key.hpp"
 #include "util/monitor.hpp"
 
@@ -101,6 +102,7 @@ check(ssl::context &sslctx)
 
     auto sentinel = util::monitor::record("check");
     auto con      = std::make_shared< power_trade::connector >(this_exec, sslctx);
+    auto eth_log  = power_trade::tick_logger(con, "ETH-USD", fs::temp_directory_path() / "eth-usd.txt");
 
     auto watch1        = power_trade::event_listener(con, "heartbeat");
     auto watch2        = power_trade::orderbook_listener_impl::create(this_exec, con, trading::spot_key("eth/usd"));

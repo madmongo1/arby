@@ -13,6 +13,7 @@
 #include "config/json.hpp"
 #include "config/websocket.hpp"
 #include "power_trade/connection_state.hpp"
+#include "trading/types.hpp"
 #include "util/cross_executor_connection.hpp"
 
 #include <boost/asio/awaitable.hpp>
@@ -135,6 +136,58 @@ struct connector_impl
     using ws_stream                   = websocket::stream< tls_layer >;
     static constexpr char classname[] = "connector_impl";
 
+    struct inbound_message
+    {
+        trading::timestamp_type timestamp_;
+        beast::flat_buffer      buffer_;
+        json::value             value_;
+        json::string            type_;
+        json::object const     *object_;
+
+        beast::flat_buffer &
+        prepare()
+        {
+            timestamp_ = std::chrono::system_clock::now();
+            object_    = nullptr;
+            type_.clear();
+            value_ = nullptr;
+            buffer_.clear();
+            return buffer_;
+        }
+
+        json::string_view
+        view() const
+        {
+            auto d = buffer_.data();
+            return json::string_view(static_cast< const char * >(d.data()), d.size());
+        }
+
+        json::string const &
+        type() const
+        {
+            return type_;
+        }
+
+        trading::timestamp_type
+        timestamp() const
+        {
+            return timestamp_;
+        }
+
+        void
+        commit()
+        {
+            timestamp_ = std::chrono::system_clock::now();
+            value_     = json::parse(view());
+            if (auto outer = value_.if_object(); outer && !outer->empty())
+            {
+                auto &[k, v] = *outer->begin();
+                type_.assign(k.begin(), k.end());
+                object_ = v.if_object();
+            }
+        }
+    };
+
     // Note that the signal type is not thread-safe. You must only interact with
     // the signals while on the same executor and thread as the connector
     using message_signal =
@@ -194,13 +247,10 @@ struct connector_impl
     interruptible_connect(ws_stream &stream);
 
     /// @brief Attempt to handle an incoming message
-    /// @param data a string view representing the message payload
-    /// @param ec output variable that records any errors. If this is true, the
-    /// function will return false
     /// @return boolean value indicating that the message was dispatched to at
     /// least one listener
     bool
-    handle_message_data(json::string_view data, error_code &ec);
+    handle_message(std::shared_ptr< inbound_message const > pmessage);
 
     void
     set_connection_state(error_code ec);
@@ -229,7 +279,7 @@ struct connector_impl
     connection_state_signal connstate_signal_;
     connection_state        connstate_ { asio::error::not_connected };
 
-    using signal_map = boost::unordered_map< json::string, message_signal, sv_comp_equ, sv_comp_equ >;
+    using signal_map = boost::unordered_map< json::string, std::shared_ptr< inbound_message const >, sv_comp_equ, sv_comp_equ >;
     signal_map signal_map_;
 
     // state

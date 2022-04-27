@@ -216,15 +216,30 @@ connector_impl::receive_loop(ws_stream &ws)
     try
     {
         error_code         ec;
+        auto               pmessage = std::shared_ptr< inbound_message >(10'000'000);
         beast::flat_buffer buf;
         buf.max_size(10'000'000);
         for (; !ec;)
         {
-            auto size = co_await ws.async_read(buf, redirect_error(use_awaitable, ec));
+            auto size = co_await ws.async_read(pmessage->prepare(), redirect_error(use_awaitable, ec));
             if (ec)
             {
                 fmt::print("{}: read error: {}\n", __func__, ec.message());
                 break;
+            }
+            try
+            {
+                pmessage->commit();
+                if (!handle_message(pmessage))
+                    spdlog::error("{}::{} unhandled {}", util::truncate(pmessage->view()));
+            }
+            catch (system_error &se)
+            {
+                ec = se.code();
+            }
+            catch (std::exception &e)
+            {
+                ec = asio::error::invalid_argument;
             }
 
             auto now = std::chrono::system_clock::now();
@@ -234,12 +249,6 @@ connector_impl::receive_loop(ws_stream &ws)
             auto handled = handle_message_data(data, ec);
             if (ec)
                 break;
-
-            buf.consume(size);
-            if (!handled)
-            {
-                fmt::print("{}::{} : unhandled {} : {}\n", classname, __func__, now, util::truncate(data));
-            }
         }
 
         if (connstate_.up())
@@ -254,41 +263,20 @@ connector_impl::receive_loop(ws_stream &ws)
 }
 
 bool
-connector_impl::handle_message_data(json::string_view data, error_code &ec)
+connector_impl::handle_message(std::shared_ptr< inbound_message const > pmessage)
 {
-    auto pjson = std::make_shared< json::value >(json::parse(data, ec));
-    if (ec)
+    auto map_iter = signal_map_.find(pmessage->type());
+    if (map_iter == signal_map_.end())
         return false;
-
-    if (auto pobject = pjson->if_object())
+    auto &sig = signal_map_[pmessage->type()];
+    if (sig.empty())
+        return false;
     {
-        if (pobject->size() == 1)
-        {
-            auto key     = pobject->begin()->key();
-            auto payload = std::shared_ptr< json::object const >(pjson, pobject->begin()->value().if_object());
-
-            if (!payload)
-                goto unrecognised;
-
-            auto map_iter = signal_map_.find(json::string(key.data(), key.size()));
-            if (map_iter == signal_map_.end())
-                return false;
-            auto &sig = map_iter->second;
-            if (sig.empty())
-            {
-                signal_map_.erase(map_iter);
-                return false;
-            }
-            else
-            {
-                map_iter->second(payload);
-                return true;
-            }
-        }
+        signal_map_.erase(map_iter);
+        return false;
     }
-unrecognised:
-    fmt::print("{}::{} unrecognised JSON format: {}", classname, __func__, data);
-    return false;
+    sig(pmessage);
+    return true;
 }
 
 boost::signals2::connection
