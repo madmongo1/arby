@@ -16,65 +16,45 @@ namespace arby
 {
 namespace power_trade
 {
+namespace
+{
+template < class... Ts >
+struct overloaded : Ts...
+{
+    using Ts::operator()...;
+};
+}   // namespace
+
 void
 orderbook_snapshot_service::replay_tick(order_book &book, const tick_record &tick)
 {
-    auto to_price     = [](json::value const v) { return trading::price_type(v.as_string().c_str()); };
-    auto to_qty       = [](json::value const v) { return trading::qty_type(v.as_string().c_str()); };
-    auto to_side      = [](json::value const v) { return *wise_enum::from_string< trading::side_type >(v.as_string()); };
-    auto to_timestamp = [](json::value const v)
-    {
-        using namespace std::chrono;
-        return system_clock::time_point(microseconds(::atol(v.as_string().c_str())));
+    auto visitor = overloaded {
+        [&book](tick_record::snapshot const &snap)
+        {
+            book.reset();
+            for (auto &bid : snap.bids)
+                book.add(bid);
+            for (auto &offer : snap.offers)
+                book.add(offer);
+        },
+        [&book](tick_record::add const &a) { book.add(a); },
+        [&book](tick_record::remove const &r) { book.remove(r); },
+        [&book](tick_record::execute const &e) { book.execute(e); },
     };
 
-    auto const &p = *tick.payload;
-
-    switch (tick.code)
-    {
-    case tick_code::snapshot:
-        book.reset();
-        for (auto &e : p.at("buy").as_array())
-        {
-            auto &oe = e.as_object();
-            book.add(oe.at("orderid").as_string(),
-                     to_price(oe.at("price")),
-                     to_qty(oe.at("quantity")),
-                     trading::side_type::buy,
-                     to_timestamp(oe.at("utc_timestamp")));
-        }
-        for (auto &e : p.at("sell").as_array())
-        {
-            auto &oe = e.as_object();
-            book.add(oe.at("orderid").as_string(),
-                     to_price(oe.at("price")),
-                     to_qty(oe.at("quantity")),
-                     trading::side_type::sell,
-                     to_timestamp(oe.at("utc_timestamp")));
-        }
-        break;
-    case tick_code::add:
-        book.add(p.at("order_id").as_string(),
-                 to_price(p.at("price")),
-                 to_qty(p.at("quantity")),
-                 to_side(p.at("side")),
-                 to_timestamp(p.at("utc_timestamp")));
-        break;
-    case tick_code::remove:
-        book.remove(p.at("order_id").as_string(), to_side(p.at("side")), to_timestamp(p.at("utc_timestamp")));
-        break;
-
-    case tick_code::execute:
-        book.execute(
-            p.at("order_id").as_string(), to_side(p.at("side")), to_qty(p.at("quantity")), to_timestamp(p.at("utc_timestamp")));
-        break;
-    }
+    boost::variant2::visit(visitor, tick.as_variant());
 }
 
 std::unique_ptr< orderbook_snapshot >
 orderbook_snapshot_service::process_tick(tick_record tick)
 {
-    if (tick.code == tick_code::snapshot)
+    auto visitor = overloaded { [&](tick_record::snapshot const &snap)
+                                {
+                                    tick_history_.reset();
+                                    current_generation_ += 1;
+                                } };
+
+    if (holds_alternative< tick_record::snapshot >(tick.as_variant()))
     {
         tick_history_.reset();
         current_generation_ += 1;

@@ -8,3 +8,8 @@
 //
 
 #include "tick_history.hpp"
+
+namespace arby::power_trade
+{
+
+}   // namespace arby::power_trade

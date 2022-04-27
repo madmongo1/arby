@@ -10,19 +10,20 @@
 #ifndef ARBY_ARBY_POWER_TRADE_ORDER_BOOK_HPP
 #define ARBY_ARBY_POWER_TRADE_ORDER_BOOK_HPP
 
-#include "config/json.hpp"
 #include "config/wise_enum.hpp"
+#include "power_trade/tick_record.hpp"
 #include "trading/types.hpp"
 
 #include <chrono>
 #include <list>
 #include <map>
+#include <string>
 
 namespace arby::power_trade
 {
 struct order_qty
 {
-    json::string      orderid;
+    std::string       orderid;
     trading::qty_type qty;
 
     friend bool
@@ -54,20 +55,13 @@ struct order_book
     top_offer_str() const;
 
     void
-    add(json::string const                   &order_id,
-        trading::price_type                   price,
-        trading::qty_type                     quantity,
-        trading::side_type                    side,
-        std::chrono::system_clock::time_point timestamp);
+    add(tick_record::add const &r);
 
     void
-    remove(json::string const &order_id, trading::side_type side, std::chrono::system_clock::time_point timestamp);
+    remove(tick_record::remove const &r);
 
     void
-    execute(json::string const                   &order_id,
-            trading::side_type                    side,
-            trading::qty_type                     qty,
-            std::chrono::system_clock::time_point timestamp);
+    execute(tick_record::execute const &e);
 
     void
     reset();
@@ -79,10 +73,10 @@ struct order_book
     operator<<(std::ostream &os, order_book const &book);
 
     using offer_ladder      = std::map< trading::price_type, level_data, std::less<> >;
-    using offer_order_cache = std::map< json::string, std::tuple< offer_ladder::iterator, level_data::qty_list ::iterator > >;
+    using offer_order_cache = std::map< std::string, std::tuple< offer_ladder::iterator, level_data::qty_list ::iterator > >;
 
     using bid_ladder      = std::map< trading::price_type, level_data, std::greater<> >;
-    using bid_order_cache = std::map< json::string, std::tuple< bid_ladder::iterator, level_data::qty_list ::iterator > >;
+    using bid_order_cache = std::map< std::string, std::tuple< bid_ladder::iterator, level_data::qty_list ::iterator > >;
 
     std::chrono::system_clock::time_point last_update_;
 

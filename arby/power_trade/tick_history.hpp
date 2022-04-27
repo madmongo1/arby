@@ -12,33 +12,16 @@
 
 #include "config/json.hpp"
 #include "config/wise_enum.hpp"
+#include "power_trade/tick_record.hpp"
+#include "trading/types.hpp"
+
+#include <boost/variant2.hpp>
 
 #include <memory>
 #include <set>
 
 namespace arby::power_trade
 {
-WISE_ENUM_CLASS(tick_code, snapshot, add, remove, execute)
-
-template < class Stream >
-decltype(auto)
-operator<<(Stream &s, tick_code code)
-{
-    return s << wise_enum::to_string(code);
-}
-
-struct tick_record
-{
-    tick_record(tick_code code, std::shared_ptr< json::object const > payload)
-    : payload(std::move(payload))
-    , code(code)
-    {
-    }
-
-    std::shared_ptr< json::object const > payload;
-    tick_code                             code;
-};
-
 struct tick_history
 {
     std::uint64_t                          next_sequence = 0;

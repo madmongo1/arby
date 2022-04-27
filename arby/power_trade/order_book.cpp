@@ -65,48 +65,43 @@ operator<<(std::ostream &os, const order_book &book)
     return os;
 }
 void
-order_book::add(const json::string                   &order_id,
-                trading::price_type                   price,
-                trading::qty_type                     quantity,
-                trading::side_type                    side,
-                std::chrono::system_clock::time_point timestamp)
+order_book::add(tick_record::add const &r)
 {
-    last_update_ = std::max(last_update_, timestamp);
+    last_update_ = std::max(last_update_, r.timestamp);
 
-    if (side == trading::buy)
+    if (r.side == trading::buy)
     {
-        auto ilevel = bids_.find(price);
+        auto ilevel = bids_.find(r.price);
         if (ilevel == bids_.end())
-            ilevel = bids_.emplace(price, level_data()).first;
+            ilevel = bids_.emplace(r.price, level_data()).first;
         auto &detail = ilevel->second;
-        detail.aggregate_depth += quantity;
-        auto iqty            = detail.orders.insert(detail.orders.end(), order_qty { .orderid = order_id, .qty = quantity });
-        bid_cache_[order_id] = std::make_tuple(ilevel, iqty);
-        aggregate_bids_ += quantity;
+        detail.aggregate_depth += r.qty;
+        auto iqty              = detail.orders.insert(detail.orders.end(), order_qty { .orderid = r.order_id, .qty = r.qty });
+        bid_cache_[r.order_id] = std::make_tuple(ilevel, iqty);
+        aggregate_bids_ += r.qty;
     }
     else
     {
-        auto ilevel = offers_.find(price);
+        auto ilevel = offers_.find(r.price);
         if (ilevel == offers_.end())
-            ilevel = offers_.emplace(price, level_data()).first;
+            ilevel = offers_.emplace(r.price, level_data()).first;
         auto &detail = ilevel->second;
-        detail.aggregate_depth += quantity;
-        auto iqty              = detail.orders.insert(detail.orders.end(), order_qty { .orderid = order_id, .qty = quantity });
-        offer_cache_[order_id] = std::make_tuple(ilevel, iqty);
-        aggregate_offers_ += quantity;
+        detail.aggregate_depth += r.qty;
+        auto iqty                = detail.orders.insert(detail.orders.end(), order_qty { .orderid = r.order_id, .qty = r.qty });
+        offer_cache_[r.order_id] = std::make_tuple(ilevel, iqty);
+        aggregate_offers_ += r.qty;
     }
-
-    last_update_ = timestamp;
 }
+
 void
-order_book::remove(const json::string &order_id, trading::side_type side, std::chrono::system_clock::time_point timestamp)
+order_book::remove(tick_record::remove const &tick)
 {
-    if (timestamp < last_update_)
+    if (tick.timestamp < last_update_)
         throw std::runtime_error("updates out of order");
 
-    if (side == trading::buy)
+    if (tick.side == trading::buy)
     {
-        auto icache = bid_cache_.find(order_id);
+        auto icache = bid_cache_.find(tick.order_id);
         if (icache == bid_cache_.end())
             return;
         auto &[ilevel, iqty] = icache->second;
@@ -120,7 +115,7 @@ order_book::remove(const json::string &order_id, trading::side_type side, std::c
     }
     else
     {
-        auto icache = offer_cache_.find(order_id);
+        auto icache = offer_cache_.find(tick.order_id);
         if (icache == offer_cache_.end())
             return;
         auto &[ilevel, iqty] = icache->second;
@@ -133,7 +128,7 @@ order_book::remove(const json::string &order_id, trading::side_type side, std::c
         offer_cache_.erase(icache);
     }
 
-    last_update_ = timestamp;
+    last_update_ = tick.timestamp;
 }
 
 bool
@@ -144,48 +139,45 @@ operator==(order_book const &l, order_book const &r)
 }
 
 void
-order_book::execute(json::string const                   &order_id,
-                    trading::side_type                    side,
-                    trading::qty_type                     qty,
-                    std::chrono::system_clock::time_point timestamp)
+order_book::execute(tick_record::execute const &tick)
 {
-    if (timestamp < last_update_)
+    if (tick.timestamp < last_update_)
         throw std::runtime_error("updates out of order");
 
-    if (side == trading::buy)
+    if (tick.side == trading::buy)
     {
-        auto icache = bid_cache_.find(order_id);
+        auto icache = bid_cache_.find(tick.order_id);
         if (icache == bid_cache_.end())
             return;
         auto &[ilevel, iqty] = icache->second;
         auto &detail         = ilevel->second;
-        if (iqty->qty -= qty == 0)
+        if (iqty->qty -= tick.qty == 0)
         {
             detail.orders.erase(iqty);
-            bid_cache_.erase(order_id);
+            bid_cache_.erase(tick.order_id);
             if (detail.orders.empty())
                 bids_.erase(ilevel->first);
         }
-        aggregate_bids_ -= qty;
+        aggregate_bids_ -= tick.qty;
     }
     else
     {
-        auto icache = offer_cache_.find(order_id);
+        auto icache = offer_cache_.find(tick.order_id);
         if (icache == offer_cache_.end())
             return;
         auto &[ilevel, iqty] = icache->second;
         auto &detail         = ilevel->second;
-        if (iqty->qty -= qty == 0)
+        if (iqty->qty -= tick.qty == 0)
         {
             detail.orders.erase(iqty);
-            offer_cache_.erase(order_id);
+            offer_cache_.erase(tick.order_id);
             if (detail.orders.empty())
                 offers_.erase(ilevel->first);
         }
-        aggregate_bids_ -= qty;
+        aggregate_bids_ -= tick.qty;
     }
 
-    last_update_ = timestamp;
+    last_update_ = tick.timestamp;
 }
 
 void
