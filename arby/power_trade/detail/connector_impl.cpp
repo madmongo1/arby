@@ -7,7 +7,7 @@
 // Official repository: https://github.com/madmongo1/arby
 //
 
-#include "connector_impl.hpp"
+#include "power_trade/detail/connector_impl.hpp"
 
 #include "asioex/scoped_interrupt.hpp"
 #include "network/connect_ssl.hpp"
@@ -20,7 +20,7 @@
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 
-namespace arby::power_trade
+namespace arby::power_trade::detail
 {
 
 namespace fs = boost::filesystem;
@@ -160,17 +160,11 @@ connector_impl::interruptible_connect(ws_stream &stream)
     {
         auto ic_slot = interrupt_connection_.slot();
         ic_slot.assign(forward_interrupt);
-        BOOST_SCOPE_EXIT_ALL(ic_slot)
-        {
-            ic_slot.clear();
-        };
+        BOOST_SCOPE_EXIT_ALL(ic_slot) { ic_slot.clear(); };
 
         auto my_slot = (co_await asio::this_coro::cancellation_state).slot();
         my_slot.assign(forward_interrupt);
-        BOOST_SCOPE_EXIT_ALL(my_slot)
-        {
-            my_slot.clear();
-        };
+        BOOST_SCOPE_EXIT_ALL(my_slot) { my_slot.clear(); };
 
         co_await co_spawn(get_executor(),
                           network::connect(stream, host_, port_, path_),
@@ -317,11 +311,4 @@ connector_impl::set_connection_state(error_code ec)
     connstate_signal_(connstate_);
 }
 
-std::ostream &
-operator<<(std::ostream &os, const connection_state &cstate)
-{
-    if (cstate.up())
-        return os << "up";
-    return os << "down (" << cstate.ec_.message() << ')';
-}
-}   // namespace arby::power_trade
+}   // namespace arby::power_trade::detail

@@ -13,10 +13,10 @@ namespace arby
 {
 namespace power_trade
 {
-    connector::connector(asio::any_io_executor exec, ssl::context &ioc)
-    : impl_(std::make_shared< connector_impl >(exec, ioc))
-    {
-        impl_->start();
+connector::connector(asio::any_io_executor exec, ssl::context &ioc)
+: impl_(std::make_shared< impl_class >(exec, ioc))
+{
+    impl_->start();
     }
 
     asio::awaitable< util::cross_executor_connection >

@@ -18,28 +18,33 @@ namespace arby
 namespace power_trade
 {
 
-    struct event_listener : std::enable_shared_from_this< event_listener >
+/// @brief an event listener is part of the connection object. It shares the same executor.
+struct event_listener
+{
+    struct impl : std::enable_shared_from_this< impl >
     {
-        using executor_type = connector_impl::executor_type;
+        using executor_type = connector::executor_type;
 
-        static std::shared_ptr< event_listener >
+        static std::shared_ptr< impl >
         create(std::shared_ptr< connector > connector, json::string const &primary);
 
-        event_listener(std::shared_ptr< connector > connector);
+        impl(std::shared_ptr< connector > connector);
 
-      private:
-        event_listener(event_listener const &) = delete;
+        impl(impl const &) = delete;
 
-        event_listener &
-        operator=(event_listener const &) = delete;
+        impl &
+        operator=(impl const &) = delete;
 
         void
         start(json::string const &primary);
 
+        void
+        stop();
+
         executor_type const &
         get_executor() const
         {
-            return connector_->get_implementation().get_executor();
+            return connector_->get_executor();
         }
 
       private:
@@ -54,6 +59,27 @@ namespace power_trade
         boost::signals2::scoped_connection status_connection_;
         boost::signals2::scoped_connection message_connection_;
     };
+
+    using executor_type = impl::executor_type;
+
+    event_listener(std::shared_ptr< connector > connector, json::string const &primary);
+    event_listener(event_listener &&other);
+    event_listener &
+    operator=(event_listener &&other);
+    ~event_listener();
+
+    executor_type const &
+    get_executor() const
+    {
+        return impl_->get_executor();
+    }
+
+  private:
+    void
+    destroy();
+
+    std::shared_ptr< impl > impl_;
+};
 
 }   // namespace power_trade
 }   // namespace arby

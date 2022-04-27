@@ -17,13 +17,13 @@ namespace
 auto
 make_snap()
 {
-    return power_trade::tick_record { .payload = std::make_shared< json::object >(), .code = power_trade::tick_code::snapshot };
+    return power_trade::tick_record { power_trade::tick_code::snapshot, std::make_shared< json::object >() };
 }
 
 auto
 make_add()
 {
-    return power_trade::tick_record { .payload = std::make_shared< json::object >(), .code = power_trade::tick_code::add };
+    return power_trade::tick_record { power_trade::tick_code::add, std::make_shared< json::object >() };
 }
 
 }   // namespace

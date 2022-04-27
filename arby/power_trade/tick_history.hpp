@@ -29,6 +29,12 @@ operator<<(Stream &s, tick_code code)
 
 struct tick_record
 {
+    tick_record(tick_code code, std::shared_ptr< json::object const > payload)
+    : payload(std::move(payload))
+    , code(code)
+    {
+    }
+
     std::shared_ptr< json::object const > payload;
     tick_code                             code;
 };

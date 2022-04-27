@@ -19,8 +19,9 @@ namespace
 auto
 make_snap()
 {
-    return power_trade::tick_record { .payload = std::make_shared< json::object >(json::parse(
-                                                                                      R"__json(
+    return power_trade::tick_record { power_trade::tick_code::snapshot,
+                                      std::make_shared< json::object >(json::parse(
+                                                                           R"__json(
 {
     "server_utc_timestamp":"1000",
     "market_id":"0",
@@ -29,8 +30,7 @@ make_snap()
     "sell":[{"price":"39630.00","quantity":"0.00250000","orderid":"2","utc_timestamp":"2"}]
 }
 )__json")
-                                                                                      .as_object()),
-                                      .code    = power_trade::tick_code::snapshot };
+                                                                           .as_object()) };
 }
 
 auto
@@ -40,13 +40,13 @@ make_add(json::string              orderid,
          trading::qty_type         qty,
          std::chrono::microseconds ts)
 {
-    return power_trade::tick_record { .payload = std::make_shared< json::object >(
+    return power_trade::tick_record { power_trade::tick_code::add,
+                                      std::make_shared< json::object >(
                                           json::object({ { "order_id", orderid },
                                                          { "side", wise_enum::to_string(side) },
                                                          { "price", to_string(price) },
                                                          { "quantity", to_string(qty) },
-                                                         { "utc_timestamp", std::to_string(ts.count()) } })),
-                                      .code = power_trade::tick_code::add };
+                                                         { "utc_timestamp", std::to_string(ts.count()) } })) };
 }
 }   // namespace
 

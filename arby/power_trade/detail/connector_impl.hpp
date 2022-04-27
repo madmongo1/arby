@@ -7,11 +7,12 @@
 // Official repository: https://github.com/madmongo1/arby
 //
 
-#ifndef ARBY_ARBY_POWER_TRADE_CONNECTOR_IMPL_HPP
-#define ARBY_ARBY_POWER_TRADE_CONNECTOR_IMPL_HPP
+#ifndef ARBY_ARBY_POWER_TRADE_DETAIL_CONNECTOR_IMPL_HPP
+#define ARBY_ARBY_POWER_TRADE_DETAIL_CONNECTOR_IMPL_HPP
 
 #include "config/json.hpp"
 #include "config/websocket.hpp"
+#include "power_trade/connection_state.hpp"
 #include "util/cross_executor_connection.hpp"
 
 #include <boost/asio/awaitable.hpp>
@@ -24,40 +25,8 @@
 #include <iosfwd>
 #include <tuple>
 
-namespace arby::power_trade
+namespace arby::power_trade::detail
 {
-
-struct connection_state
-{
-    connection_state(error_code ec = asio::error::not_connected)
-    : ec_(ec)
-    {
-    }
-
-    void
-    set(error_code ec)
-    {
-        ec_ = ec;
-    }
-
-    bool
-    up() const
-    {
-        return !ec_;
-    }
-
-    bool
-    down() const
-    {
-        return ec_.failed();
-    }
-
-    friend std::ostream &
-    operator<<(std::ostream &os, connection_state const &cstate);
-
-  private:
-    error_code ec_;
-};
 
 struct field_matcher
 {
@@ -270,6 +239,6 @@ struct connector_impl
     asio::cancellation_signal stop_;
     bool                      stopped_ = false;
 };
-}   // namespace arby::power_trade
+}   // namespace arby::power_trade::detail
 
-#endif   // ARBY_ARBY_POWER_TRADE_CONNECTOR_IMPL_HPP
+#endif   // ARBY_ARBY_POWER_TRADE_DETAIL_CONNECTOR_IMPL_HPP

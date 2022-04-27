@@ -9,6 +9,8 @@
 
 #include "order_book.hpp"
 
+#include "util/table.hpp"
+
 #include <fmt/chrono.h>
 #include <fmt/ostream.h>
 
@@ -19,74 +21,6 @@
 namespace arby::power_trade
 {
 
-struct table
-{
-    std::map< std::size_t, std::map< std::size_t, std::string > > data_;
-    std::size_t                                                   rows = 0;
-
-    void
-    set(std::size_t row, std::size_t col, std::string s)
-    {
-        data_[row][col] = std::move(s);
-        rows            = std::max(rows, row);
-    }
-
-    std::vector< std::size_t >
-    calc_widths() const
-    {
-        auto result = std::vector< std::size_t >();
-
-        for (auto &[r, cdata] : data_)
-            for (auto &[c, str] : cdata)
-            {
-                if (c >= result.size())
-                    result.resize(c + 1, 0);
-
-                result[c] = std::max(result[c], str.size());
-            }
-
-        return result;
-    };
-
-    static std::string
-    pad(std::string s, std::size_t field)
-    {
-        auto pre  = (field - s.size()) / 2;
-        s         = std::string(pre, ' ') + s;
-        auto post = field - s.size();
-        s += std::string(post, ' ');
-        return s;
-    }
-
-    friend std::ostream &
-    operator<<(std::ostream &os, table const &tab)
-    {
-        const auto widths = tab.calc_widths();
-
-        const char *nl = "";
-        for (auto &[r, cdata] : tab.data_)
-        {
-            os << nl;
-            auto sep = std::string_view("");
-            for (auto col = std::size_t(0); col < widths.size(); ++col)
-            {
-                auto idata = cdata.find(col);
-                if (idata == cdata.end())
-                {
-                    os << sep << pad("", widths[col]);
-                }
-                else
-                {
-                    os << sep << pad(idata->second, widths[col]);
-                }
-                sep = " | ";
-            }
-            nl = "\n";
-        }
-        return os;
-    }
-};
-
 std::ostream &
 operator<<(std::ostream &os, const order_book &book)
 {
@@ -95,7 +29,7 @@ operator<<(std::ostream &os, const order_book &book)
 
     auto max_levels = std::size_t(10);
 
-    auto tab = table();
+    auto tab = util::table();
 
     std::size_t row = 0;
 
@@ -258,10 +192,12 @@ void
 order_book::reset()
 {
     last_update_ = std::chrono::system_clock::time_point ::min();
-    offers_.clear();
-    offer_cache_.clear();
     bids_.clear();
     bid_cache_.clear();
+    aggregate_bids_ = 0;
+    offers_.clear();
+    offer_cache_.clear();
+    aggregate_offers_ = 0;
 }
 
 std::string

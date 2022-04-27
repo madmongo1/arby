@@ -215,9 +215,8 @@ orderbook_listener_impl::_handle_tick(std::weak_ptr< orderbook_listener_impl > w
 
     try
     {
-        asio::dispatch(asio::bind_executor(self->get_executor(),
-                                           [self, tick = tick_record { .payload = payload, .code = code }]() mutable
-                                           { self->on_tick(std::move(tick)); }));
+        asio::dispatch(asio::bind_executor(
+            self->get_executor(), [self, tick = tick_record { code, payload }]() mutable { self->on_tick(std::move(tick)); }));
     }
     catch (std::exception &e)
     {

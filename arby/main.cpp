@@ -102,7 +102,7 @@ check(ssl::context &sslctx)
     auto sentinel = util::monitor::record("check");
     auto con      = std::make_shared< power_trade::connector >(this_exec, sslctx);
 
-    auto watch1        = power_trade::event_listener::create(con, "heartbeat");
+    auto watch1        = power_trade::event_listener(con, "heartbeat");
     auto watch2        = power_trade::orderbook_listener_impl::create(this_exec, con, trading::spot_key("eth/usd"));
     auto [w2con, snap] = watch2->subscribe([](std::shared_ptr< power_trade::orderbook_snapshot const > snap)
                                            { spdlog::info("*** snapshot *** {}", snap); });

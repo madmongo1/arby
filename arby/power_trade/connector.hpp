@@ -10,7 +10,7 @@
 #ifndef ARBY_ARBY_POWER_TRADE_CONNECTOR_HPP
 #define ARBY_ARBY_POWER_TRADE_CONNECTOR_HPP
 
-#include "power_trade/connector_impl.hpp"
+#include "power_trade/detail/connector_impl.hpp"
 
 namespace arby
 {
@@ -20,9 +20,11 @@ namespace power_trade
     {
         static constexpr char classname[] = "power_trade::connector";
 
-        using impl_type             = connector_impl;
-        using message_slot          = impl_type::message_slot;
-        using connection_state_slot = impl_type::connection_state_slot;
+        using impl_class            = detail::connector_impl;
+        using impl_type             = std::shared_ptr< impl_class >;
+        using message_slot          = impl_class::message_slot;
+        using connection_state_slot = impl_class::connection_state_slot;
+        using executor_type         = impl_class::executor_type;
 
         connector(asio::any_io_executor exec, ssl::context &ioc);
 
@@ -58,16 +60,10 @@ namespace power_trade
             asio::dispatch(impl_->get_executor(), [impl = impl_] { impl->interrupt(); });
         }
 
-        connector_impl &
-        get_implementation()
+        executor_type const &
+        get_executor() const
         {
-            return *impl_;
-        }
-
-        connector_impl const &
-        get_implementation() const
-        {
-            return *impl_;
+            return impl_->get_executor();
         }
 
         /// @brief Await the subscription to a message subscrption.
@@ -88,8 +84,14 @@ namespace power_trade
         asio::awaitable< std::tuple< util::cross_executor_connection, connection_state > >
         watch_connection_state(connection_state_slot slot);
 
+        impl_type const &
+        get_implementation()
+        {
+            return impl_;
+        }
+
       private:
-        std::shared_ptr< connector_impl > impl_;
+        impl_type impl_;
     };
 
 }   // namespace power_trade

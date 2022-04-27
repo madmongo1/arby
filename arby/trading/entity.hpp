@@ -17,14 +17,21 @@ namespace arby
 namespace trading
 {
 
+using entity_key = std::string;
+
+struct entity_service_impl;
+
 struct entity_impl : std::enable_shared_from_this< entity_impl >
 {
     using executor_type = asio::any_io_executor;
 
-    virtual void
-    start() = 0;
-    virtual void
-    stop() = 0;
+    entity_impl(entity_service_impl *service, executor_type exec, entity_key key, int version);
+
+    void
+    start();
+
+    void
+    stop();
 
     executor_type const &
     get_executor() const
@@ -46,8 +53,58 @@ struct entity_impl : std::enable_shared_from_this< entity_impl >
         return std::static_pointer_cast< T >(p->weak_from_this());
     }
 
+    /// @brief Produce a detailed report of the object
+    /// @return a string containing formatted text
+    virtual asio::awaitable< std::string >
+    detail() const = 0;
+
+    /// @brief Produce a one-line summary of the object
+    /// @return a string containing text
+    virtual asio::awaitable< std::string >
+    summary() const = 0;
+
+    entity_key const &
+    key() const
+    {
+        return key_;
+    }
+
+    std::uint64_t
+    version() const
+    {
+        return version_;
+    }
+
   private:
-    executor_type exec_;
+    virtual void handle_start() = 0;
+    virtual void handle_stop() = 0;
+
+  private:
+    executor_type        exec_;
+    entity_service_impl *service_;
+
+    /// @brief Key summarising the creation arguments of this entity in such a way that this may be used as an index for entity
+    /// lookup
+    const entity_key key_;
+
+    /// @brief every entity_impl created has a unique version, even if it shares a key with another
+    const std::uint64_t version_;
+};
+
+struct entity_impl_service
+{
+    asio::any_io_executor exec_;
+
+    /// @brief Enumerate all entities into an HTML body
+    /// @param body
+    /// @return
+    asio::awaitable< void >
+    enumerate(std::string &body) const;
+
+    /// @brief A map of all instances of an entity_impl.
+    /// @note if an entity is destroyed and quickly recreated, the impl of the destroyed entity may still be shutting down.
+    /// In this case, more than one version of the same entity may exist at once. But only one should be in the running state.
+    std::unordered_multimap< entity_key, std::weak_ptr< entity_impl > > cache_;
 };
 
 /// @brief Base class of any object that can be managed by entity caches.
