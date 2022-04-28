@@ -16,83 +16,84 @@ namespace arby
 {
 namespace power_trade
 {
-    struct connector
+struct connector
+{
+    static constexpr char classname[] = "power_trade::connector";
+
+    using impl_class            = detail::connector_impl;
+    using impl_type             = std::shared_ptr< impl_class >;
+    using message_slot          = impl_class::message_slot;
+    using connection_state_slot = impl_class::connection_state_slot;
+    using executor_type         = impl_class::executor_type;
+    using inbound_message       = impl_class::inbound_message;
+
+    connector(asio::any_io_executor exec, ssl::context &ioc);
+
+    ~connector()
     {
-        static constexpr char classname[] = "power_trade::connector";
+        if (impl_)
+            impl_->stop();
+    }
 
-        using impl_class            = detail::connector_impl;
-        using impl_type             = std::shared_ptr< impl_class >;
-        using message_slot          = impl_class::message_slot;
-        using connection_state_slot = impl_class::connection_state_slot;
-        using executor_type         = impl_class::executor_type;
+    connector(connector &&other)
+    : impl_(std::move(other.impl_))
+    {
+    }
 
-        connector(asio::any_io_executor exec, ssl::context &ioc);
+    connector &
+    operator=(connector &&other)
+    {
+        if (impl_)
+            impl_->stop();
+        impl_ = std::move(other.impl_);
+        return *this;
+    }
 
-        ~connector()
-        {
-            if (impl_)
-                impl_->stop();
-        }
+    void
+    send(std::string s)
+    {
+        asio::dispatch(impl_->get_executor(), [s = std::move(s), impl = impl_] { impl->send(std::move(s)); });
+    }
 
-        connector(connector &&other)
-        : impl_(std::move(other.impl_))
-        {
-        }
+    void
+    interrupt()
+    {
+        asio::dispatch(impl_->get_executor(), [impl = impl_] { impl->interrupt(); });
+    }
 
-        connector &
-        operator=(connector &&other)
-        {
-            if (impl_)
-                impl_->stop();
-            impl_ = std::move(other.impl_);
-            return *this;
-        }
+    executor_type const &
+    get_executor() const
+    {
+        return impl_->get_executor();
+    }
 
-        void
-        send(std::string s)
-        {
-            asio::dispatch(impl_->get_executor(), [s = std::move(s), impl = impl_] { impl->send(std::move(s)); });
-        }
+    /// @brief Await the subscription to a message subscrption.
+    ///
+    /// This allows coroutines running on different executors to build
+    /// subscriptions to messages.
+    /// @note the owner of the subscription must schedule the disconnect
+    /// through this object's interface to ensure that the disconnection
+    /// takes place on the correct executor.
+    /// @note the slot will be executed on the internal execiutof of this
+    /// object's implementation. The slot implementation should be careful
+    /// to marshal execution to its own executor if different.
+    /// @param type
+    /// @return
+    asio::awaitable< util::cross_executor_connection >
+    watch_messages(json::string type, message_slot slot);
 
-        void
-        interrupt()
-        {
-            asio::dispatch(impl_->get_executor(), [impl = impl_] { impl->interrupt(); });
-        }
+    asio::awaitable< std::tuple< util::cross_executor_connection, connection_state > >
+    watch_connection_state(connection_state_slot slot);
 
-        executor_type const &
-        get_executor() const
-        {
-            return impl_->get_executor();
-        }
+    impl_type const &
+    get_implementation()
+    {
+        return impl_;
+    }
 
-        /// @brief Await the subscription to a message subscrption.
-        ///
-        /// This allows coroutines running on different executors to build
-        /// subscriptions to messages.
-        /// @note the owner of the subscription must schedule the disconnect
-        /// through this object's interface to ensure that the disconnection
-        /// takes place on the correct executor.
-        /// @note the slot will be executed on the internal execiutof of this
-        /// object's implementation. The slot implementation should be careful
-        /// to marshal execution to its own executor if different.
-        /// @param type
-        /// @return
-        asio::awaitable< util::cross_executor_connection >
-        watch_messages(json::string type, message_slot slot);
-
-        asio::awaitable< std::tuple< util::cross_executor_connection, connection_state > >
-        watch_connection_state(connection_state_slot slot);
-
-        impl_type const &
-        get_implementation()
-        {
-            return impl_;
-        }
-
-      private:
-        impl_type impl_;
-    };
+  private:
+    impl_type impl_;
+};
 
 }   // namespace power_trade
 }   // namespace arby

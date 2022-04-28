@@ -73,7 +73,7 @@ struct orderbook_listener_impl
     on_connection_state(connection_state cstate);
 
     void
-    on_command_response(std::shared_ptr< json::object const > payload);
+    on_command_response(std::shared_ptr< connector::inbound_message const > payload);
 
     json::string
     build_subscribe_id() const;
@@ -91,10 +91,13 @@ struct orderbook_listener_impl
     on_execute(json::object const &payload);
 
     static void
-    _handle_command_response(std::weak_ptr< orderbook_listener_impl > weak, std::shared_ptr< json::object const > payload);
+    _handle_command_response(std::weak_ptr< orderbook_listener_impl >            weak,
+                             std::shared_ptr< connector::inbound_message const > payload);
 
     static void
-    _handle_tick(std::weak_ptr< orderbook_listener_impl > weak, std::shared_ptr< json::object const > payload, tick_code code);
+    _handle_tick(std::weak_ptr< orderbook_listener_impl >            weak,
+                 std::shared_ptr< connector::inbound_message const > payload,
+                 tick_code                                           code);
 
     void
     on_tick(tick_record tick);

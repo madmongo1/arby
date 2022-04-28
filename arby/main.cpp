@@ -110,10 +110,10 @@ check(ssl::context &sslctx)
                                            { spdlog::info("*** snapshot *** {}", snap); });
     spdlog::info("*** snapshot *** {}", snap);
 
-    auto watch3         = power_trade::orderbook_listener_impl::create(this_exec, con, trading::spot_key("btc-usd"));
-    auto [w3con, snap3] = watch3->subscribe([](std::shared_ptr< power_trade::orderbook_snapshot const > snap)
-                                            { spdlog::info("*** snapshot *** {}", snap); });
-    spdlog::info("*** snapshot *** {}", snap3);
+//    auto watch3         = power_trade::orderbook_listener_impl::create(this_exec, con, trading::spot_key("btc-usd"));
+//    auto [w3con, snap3] = watch3->subscribe([](std::shared_ptr< power_trade::orderbook_snapshot const > snap)
+//                                            { spdlog::info("*** snapshot *** {}", snap); });
+//    spdlog::info("*** snapshot *** {}", snap3);
 
     asio::cancellation_signal cancel_sig;
     co_await monitor_quit(cancel_sig, *con);

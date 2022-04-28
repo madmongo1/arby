@@ -136,13 +136,24 @@ struct connector_impl
     using ws_stream                   = websocket::stream< tls_layer >;
     static constexpr char classname[] = "connector_impl";
 
-    struct inbound_message
+    class inbound_message
     {
         trading::timestamp_type timestamp_;
         beast::flat_buffer      buffer_;
         json::value             value_;
         json::string            type_;
         json::object const     *object_;
+
+      public:
+        inbound_message(std::size_t capacity)
+        : buffer_(capacity)
+        {
+        }
+
+        json::object const& object() const
+        {
+            return *object_;
+        }
 
         beast::flat_buffer &
         prepare()
@@ -155,11 +166,11 @@ struct connector_impl
             return buffer_;
         }
 
-        json::string_view
+        std::string_view
         view() const
         {
             auto d = buffer_.data();
-            return json::string_view(static_cast< const char * >(d.data()), d.size());
+            return std::string_view(static_cast< const char * >(d.data()), d.size());
         }
 
         json::string const &
@@ -178,7 +189,9 @@ struct connector_impl
         commit()
         {
             timestamp_ = std::chrono::system_clock::now();
-            value_     = json::parse(view());
+            auto v     = view();
+            auto v1    = json::string_view(v.begin(), v.end());
+            value_     = json::parse(v);
             if (auto outer = value_.if_object(); outer && !outer->empty())
             {
                 auto &[k, v] = *outer->begin();
@@ -191,7 +204,7 @@ struct connector_impl
     // Note that the signal type is not thread-safe. You must only interact with
     // the signals while on the same executor and thread as the connector
     using message_signal =
-        boost::signals2::signal_type< void(std::shared_ptr< json::object const >),
+        boost::signals2::signal_type< void(std::shared_ptr< inbound_message const >),
                                       boost::signals2::keywords::mutex_type< boost::signals2::dummy_mutex > >::type;
 
     using message_slot          = message_signal::slot_type;
@@ -279,7 +292,7 @@ struct connector_impl
     connection_state_signal connstate_signal_;
     connection_state        connstate_ { asio::error::not_connected };
 
-    using signal_map = boost::unordered_map< json::string, std::shared_ptr< inbound_message const >, sv_comp_equ, sv_comp_equ >;
+    using signal_map = boost::unordered_map< json::string, message_signal, sv_comp_equ, sv_comp_equ >;
     signal_map signal_map_;
 
     // state

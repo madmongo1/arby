@@ -89,8 +89,8 @@ struct truncate_op : truncate_op_base
     std::string_view sv_;
 };
 
-// truncate_op< std::string_view >
-// truncate(std::string_view sv, std::size_t limit = 256);
+truncate_op
+truncate(std::string_view sv, std::size_t limit = 256);
 
 truncate_op
 truncate(std::string const &s, std::size_t limit = 256);

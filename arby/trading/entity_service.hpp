@@ -12,11 +12,25 @@
 
 #include "trading/entity.hpp"
 
-struct entity_service_impl
+namespace arby::trading
 {
+struct entity_service
+{
+    using executor_type = asio:an
+    struct impl
+    {
+    };
+
+    entity_service(asio::io_context & ioc)
+    : ioc_(&ioc)
+    {
 
 
+    }
 
+    asio::io_context* ioc_;
 };
+
+}   // namespace arby::trading
 
 #endif   // ARBY_ARBY_TRADING_ENTITY_SERVICE_HPP

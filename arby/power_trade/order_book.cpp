@@ -96,9 +96,6 @@ order_book::add(tick_record::add const &r)
 void
 order_book::remove(tick_record::remove const &tick)
 {
-    if (tick.timestamp < last_update_)
-        throw std::runtime_error("updates out of order");
-
     if (tick.side == trading::buy)
     {
         auto icache = bid_cache_.find(tick.order_id);
@@ -107,7 +104,9 @@ order_book::remove(tick_record::remove const &tick)
         auto &[ilevel, iqty] = icache->second;
         auto &detail         = ilevel->second;
         detail.aggregate_depth -= iqty->qty;
+        assert(detail.aggregate_depth >= 0);
         aggregate_bids_ -= iqty->qty;
+        assert(aggregate_bids_ >= 0);
         detail.orders.erase(iqty);
         if (detail.orders.empty())
             bids_.erase(ilevel);
@@ -121,14 +120,16 @@ order_book::remove(tick_record::remove const &tick)
         auto &[ilevel, iqty] = icache->second;
         auto &detail         = ilevel->second;
         detail.aggregate_depth -= iqty->qty;
+        assert(detail.aggregate_depth >= 0);
         aggregate_offers_ -= iqty->qty;
+        assert(aggregate_offers_ >= 0);
         detail.orders.erase(iqty);
         if (detail.orders.empty())
             offers_.erase(ilevel);
         offer_cache_.erase(icache);
     }
 
-    last_update_ = tick.timestamp;
+    last_update_ = std::max(tick.timestamp, last_update_);
 }
 
 bool
@@ -141,8 +142,6 @@ operator==(order_book const &l, order_book const &r)
 void
 order_book::execute(tick_record::execute const &tick)
 {
-    if (tick.timestamp < last_update_)
-        throw std::runtime_error("updates out of order");
 
     if (tick.side == trading::buy)
     {
@@ -177,7 +176,7 @@ order_book::execute(tick_record::execute const &tick)
         aggregate_bids_ -= tick.qty;
     }
 
-    last_update_ = tick.timestamp;
+    last_update_ = std::max(tick.timestamp, last_update_);
 }
 
 void

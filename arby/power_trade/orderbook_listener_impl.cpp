@@ -94,11 +94,11 @@ struct filter_message
     }
 
     void
-    operator()(std::shared_ptr< json::object const > payload) const
+    operator()(std::shared_ptr< connector::inbound_message const > payload) const
     {
         for (auto &[k, v] : filters)
         {
-            auto pv = payload->if_contains(k);
+            auto pv = payload->object().if_contains(k);
             if (!pv)
                 return;
             auto ps = pv->if_string();
@@ -156,17 +156,17 @@ orderbook_listener_impl::run(std::shared_ptr< orderbook_listener_impl > self)
 }
 
 void
-orderbook_listener_impl::_handle_command_response(std::weak_ptr< orderbook_listener_impl > weak,
-                                                  std::shared_ptr< json::object const >    payload)
+orderbook_listener_impl::_handle_command_response(std::weak_ptr< orderbook_listener_impl >            weak,
+                                                  std::shared_ptr< connector::inbound_message const > payload)
 {
-    spdlog::trace("{}::{}({})", classname, __func__, *payload);
+    spdlog::trace("{}::{}({})", classname, __func__, payload->view());
     auto self = weak.lock();
     if (!self)
         return;
 
     try
     {
-        if (payload->at("user_tag").as_string() != self->my_subscribe_id_)
+        if (payload->object().at("user_tag").as_string() != self->my_subscribe_id_)
             return;
         asio::dispatch(asio::bind_executor(self->get_executor(), [self, payload] { self->on_command_response(payload); }));
     }
@@ -184,11 +184,11 @@ orderbook_listener_impl::build_subscribe_id() const
 }
 
 void
-orderbook_listener_impl::on_command_response(std::shared_ptr< json::object const > payload)
+orderbook_listener_impl::on_command_response(std::shared_ptr< connector::inbound_message const > payload)
 {
-    spdlog::trace("{}::{}({})", classname, __func__, util::truncate(*payload));
+    spdlog::trace("{}::{}({})", classname, __func__, util::truncate(payload->view()));
 
-    if (auto &code = payload->at("error_code"); code == "0")
+    if (auto &code = payload->object().at("error_code"); code == "0")
     {
         book_condition_.reset(trading::not_ready);
         book_condition_.errors.push_back("subscribed");
@@ -202,21 +202,24 @@ orderbook_listener_impl::on_command_response(std::shared_ptr< json::object const
 }
 
 void
-orderbook_listener_impl::_handle_tick(std::weak_ptr< orderbook_listener_impl > weak,
-                                      std::shared_ptr< const json::object >    payload,
-                                      tick_code                                code)
+orderbook_listener_impl::_handle_tick(std::weak_ptr< orderbook_listener_impl >            weak,
+                                      std::shared_ptr< const connector::inbound_message > payload,
+                                      tick_code                                           code)
 {
     auto self = weak.lock();
     if (!self)
     {
-        spdlog::trace("{}::{} weak pointer expired, dropping tick: {} {}", classname, __func__, code, util::truncate(*payload));
+        spdlog::trace(
+            "{}::{} weak pointer expired, dropping tick: {} {}", classname, __func__, code, util::truncate(payload->view()));
         return;
     }
 
     try
     {
         asio::dispatch(asio::bind_executor(
-            self->get_executor(), [self, tick = tick_record { code, payload }]() mutable { self->on_tick(std::move(tick)); }));
+            self->get_executor(),
+            [self, tick = tick_record { code, std::shared_ptr< json::object const >(payload, &payload->object()) }]() mutable
+            { self->on_tick(std::move(tick)); }));
     }
     catch (std::exception &e)
     {

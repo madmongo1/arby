@@ -20,7 +20,7 @@ constexpr auto to_price     = [](json::value const &v) { return trading::price_t
 constexpr auto to_qty       = [](json::value const &v) { return trading::qty_type(v.as_string().c_str()); };
 constexpr auto to_side      = [](json::value const &v) { return *wise_enum::from_string< trading::side_type >(v.as_string()); };
 constexpr auto to_timestamp = [](json::value const &v)
-{ return std::chrono::system_clock::time_point(std::chrono::milliseconds(::atol(v.as_string().c_str()))); };
+{ return std::chrono::system_clock::time_point(std::chrono::nanoseconds (::atol(v.as_string().c_str()))); };
 }   // namespace
 
 auto
@@ -44,7 +44,7 @@ tick_record::make_snapshot(json::object const &p) -> snapshot
                                       .price     = to_price(oe.at("price")),
                                       .qty       = to_qty(oe.at("quantity")),
                                       .timestamp = to_timestamp(oe.at("utc_timestamp")),
-                                      .side      = trading::side_type::buy });
+                                      .side      = trading::side_type::sell });
     }
 
     return result;

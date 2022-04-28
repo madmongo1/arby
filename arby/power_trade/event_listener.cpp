@@ -52,7 +52,7 @@ event_listener::impl::start(json::string const &primary)
     message_connection_ = connector_->get_implementation()->watch_messages(
         primary,
         detail::connector_impl::message_slot(
-            [weak = weak_from_this()](std::shared_ptr< json::object const > pmessage)
+            [weak = weak_from_this()](std::shared_ptr< connector::inbound_message const > pmessage)
             {
                 if (auto self = weak.lock())
                     self->on_message(pmessage);
@@ -70,9 +70,9 @@ event_listener::impl::stop()
 }
 
 void
-event_listener::impl::on_message(const std::shared_ptr< const json::object > &pmessage)
+event_listener::impl::on_message(const std::shared_ptr< const connector::inbound_message > &pmessage)
 {
-    fmt::print("event_listener::{} - {}\n", __func__, util::truncate(json::serialize(*pmessage), 1024));
+    fmt::print("event_listener::{} - {}\n", __func__, util::truncate(pmessage->view(), 1024));
 }
 
 void

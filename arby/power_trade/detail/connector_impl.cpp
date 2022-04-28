@@ -19,6 +19,7 @@
 #include <fmt/chrono.h>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
+#include <spdlog/spdlog.h>
 
 namespace arby::power_trade::detail
 {
@@ -216,9 +217,7 @@ connector_impl::receive_loop(ws_stream &ws)
     try
     {
         error_code         ec;
-        auto               pmessage = std::shared_ptr< inbound_message >(10'000'000);
-        beast::flat_buffer buf;
-        buf.max_size(10'000'000);
+        auto               pmessage = std::make_shared< inbound_message >(std::size_t(10'000'000));
         for (; !ec;)
         {
             auto size = co_await ws.async_read(pmessage->prepare(), redirect_error(use_awaitable, ec));
@@ -231,7 +230,7 @@ connector_impl::receive_loop(ws_stream &ws)
             {
                 pmessage->commit();
                 if (!handle_message(pmessage))
-                    spdlog::error("{}::{} unhandled {}", util::truncate(pmessage->view()));
+                    spdlog::error("{}::{} unhandled {}", classname, __func__, util::truncate(pmessage->view()));
             }
             catch (system_error &se)
             {
@@ -241,14 +240,6 @@ connector_impl::receive_loop(ws_stream &ws)
             {
                 ec = asio::error::invalid_argument;
             }
-
-            auto now = std::chrono::system_clock::now();
-
-            auto data = boost::string_view(static_cast< char const * >(buf.data().data()), buf.data().size());
-
-            auto handled = handle_message_data(data, ec);
-            if (ec)
-                break;
         }
 
         if (connstate_.up())
@@ -265,16 +256,9 @@ connector_impl::receive_loop(ws_stream &ws)
 bool
 connector_impl::handle_message(std::shared_ptr< inbound_message const > pmessage)
 {
-    auto map_iter = signal_map_.find(pmessage->type());
-    if (map_iter == signal_map_.end())
-        return false;
     auto &sig = signal_map_[pmessage->type()];
     if (sig.empty())
         return false;
-    {
-        signal_map_.erase(map_iter);
-        return false;
-    }
     sig(pmessage);
     return true;
 }

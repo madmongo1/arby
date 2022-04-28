@@ -52,7 +52,7 @@ struct event_listener
         on_connection_state(connection_state stat);
 
         void
-        on_message(std::shared_ptr< json::object const > const &pmessage);
+        on_message(std::shared_ptr< connector::inbound_message const > const &pmessage);
 
       private:
         std::shared_ptr< connector >       connector_;

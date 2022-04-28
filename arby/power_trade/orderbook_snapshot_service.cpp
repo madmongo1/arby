@@ -43,6 +43,7 @@ orderbook_snapshot_service::replay_tick(order_book &book, const tick_record &tic
     };
 
     boost::variant2::visit(visitor, tick.as_variant());
+    fmt::print("{}\n", book);
 }
 
 std::unique_ptr< orderbook_snapshot >
