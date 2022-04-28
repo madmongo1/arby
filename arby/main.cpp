@@ -99,21 +99,30 @@ monitor_quit(asio::cancellation_signal &sig, power_trade::connector &conn)
 asio::awaitable< void >
 check(ssl::context &sslctx)
 {
+    using asio::use_awaitable;
+    using namespace std::literals;
+
+    auto sentinel = util::monitor::record("check");
+
     auto this_exec = co_await asio::this_coro::executor;
 
     auto http_server = web::http_server(this_exec);
     http_server.serve("localhost", "8080");
-    auto sentinel = util::monitor::record("check");
-    auto con      = std::make_shared< power_trade::connector >(this_exec, sslctx);
+
+    auto con    = std::make_shared< power_trade::connector >(this_exec, sslctx);
+    auto watch1 = power_trade::event_listener(con, "heartbeat");
+
     /*
+    auto t = asio::system_timer(this_exec, 5s);
+    co_await t.async_wait(use_awaitable);
+    http_server.shutdown();
+     */
         auto eth_log  = power_trade::tick_logger(con, "ETH-USD", fs::temp_directory_path() / "eth-usd.txt");
 
-        auto watch1        = power_trade::event_listener(con, "heartbeat");
         auto watch2        = power_trade::orderbook_listener_impl::create(this_exec, con, trading::spot_key("eth/usd"));
         auto [w2con, snap] = watch2->subscribe([](std::shared_ptr< power_trade::orderbook_snapshot const > snap)
                                                { spdlog::info("*** snapshot *** {}", snap); });
         spdlog::info("*** snapshot *** {}", snap);
-    */
     //    auto watch3         = power_trade::orderbook_listener_impl::create(this_exec, con, trading::spot_key("btc-usd"));
     //    auto [w3con, snap3] = watch3->subscribe([](std::shared_ptr< power_trade::orderbook_snapshot const > snap)
     //                                            { spdlog::info("*** snapshot *** {}", snap); });

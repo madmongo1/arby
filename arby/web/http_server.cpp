@@ -10,6 +10,9 @@
 #include "web/http_server.hpp"
 
 #include "asioex/helpers.hpp"
+#include "asioex/scoped_interrupt.hpp"
+#include "config/http.hpp"
+#include "util/monitor.hpp"
 
 #include <fmt/ostream.h>
 #include <spdlog/spdlog.h>
@@ -71,6 +74,8 @@ http_server::impl::serve(tcp::endpoint ep)
     using asio::use_awaitable;
     using asio::this_coro::executor;
 
+    auto sentinel = util::monitor::record(fmt::format("{}::{}({})", classname, __func__, ep));
+
     try
     {
         auto acceptor = tcp::acceptor(co_await executor, ep);
@@ -105,7 +110,27 @@ http_server::impl::serve(tcp::endpoint ep)
 asio::awaitable< void >
 http_server::impl::session(tcp::socket sock)
 {
-    spdlog::info("http_server[{}:{}]::session start from {}", host, port, sock.remote_endpoint());
+    using asio::use_awaitable;
+    auto sentinel = util::monitor::record(fmt::format("{}::{}({})", classname, __func__, sock.remote_endpoint()));
+
+    auto request  = http::request< http::string_body >();
+    auto response = http::response< http::string_body >();
+    auto rxbuf    = beast::flat_buffer();
+    do
+    {
+        request.clear();
+        request.body().clear();
+        co_await http::async_read(sock, rxbuf, request, use_awaitable);
+
+        // match path against installed services
+
+        response.clear();
+        response.body().clear();
+        response.body() = "Hello, World!\r\n";
+        response.prepare_payload();
+        co_await http::async_write(sock, response, use_awaitable);
+    } while (!response.need_eof());
+
     co_return;
 }
 
@@ -119,6 +144,7 @@ void
 http_server::impl::stop()
 {
     assert(asioex::on_correct_thread(get_executor()));
+    asioex::terminate(stop_signal);
 }
 
 http_server::http_server(executor_type exec)
@@ -148,7 +174,8 @@ http_server::~http_server()
 void
 http_server::shutdown()
 {
-    for (auto impl : impls_)
+    auto impls = std::exchange(impls_, {});
+    for (auto impl : impls)
         asio::dispatch(asio::bind_executor(impl->get_executor(), std::bind(&impl::stop, impl)));
 }
 
@@ -165,19 +192,21 @@ http_server::serve(std::string host, std::string port)
     impls_.push_back(my_impl);
     co_spawn(my_impl->get_executor(),
              std::bind(&impl::run, my_impl),
-             [my_impl](std::exception_ptr ep)
-             {
-                 try
+             asio::bind_cancellation_slot(
+                 my_impl->stop_signal.slot(),
+                 [my_impl](std::exception_ptr ep)
                  {
-                     if (ep)
-                         std::rethrow_exception(ep);
-                     spdlog::info("web::http_server[{}:{}] run completed", my_impl->host, my_impl->port);
-                 }
-                 catch (std::exception &e)
-                 {
-                     spdlog::error("web::http_server[{}:{}] exception: {}", my_impl->host, my_impl->port, e.what());
-                 }
-             });
+                     try
+                     {
+                         if (ep)
+                             std::rethrow_exception(ep);
+                         spdlog::info("web::http_server[{}:{}] run completed", my_impl->host, my_impl->port);
+                     }
+                     catch (std::exception &e)
+                     {
+                         spdlog::error("web::http_server[{}:{}] exception: {}", my_impl->host, my_impl->port, e.what());
+                     }
+                 }));
 }
 
 }   // namespace arby::web

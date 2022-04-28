@@ -6,17 +6,20 @@
 //
 // Official repository: https://github.com/madmongo1/arby
 //
-#ifndef ARBY_CONFIG_WEBSOCKET_HPP
-#define ARBY_CONFIG_WEBSOCKET_HPP
+#ifndef ARBY_CONFIG_HTTP_HPP
+#define ARBY_CONFIG_HTTP_HPP
 
 #include "config/asio.hpp"
-#include "config/http.hpp"
 
-#include <boost/beast/websocket.hpp>
+#include <boost/beast/core.hpp>
+#include <boost/beast/http.hpp>
+#include <boost/beast/ssl.hpp>
 
 namespace arby
 {
-namespace websocket = beast::websocket;
+namespace beast = boost::beast;
+namespace http  = beast::http;
+
 }   // namespace arby
 
 #endif

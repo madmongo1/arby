@@ -16,7 +16,8 @@ namespace arby::web
 {
 struct http_server
 {
-    using executor_type = asio::any_io_executor;
+    static constexpr char classname[] = "http_server";
+    using executor_type               = asio::any_io_executor;
 
   private:
     class impl : public std::enable_shared_from_this< impl >
@@ -26,6 +27,8 @@ struct http_server
       public:
         std::string const host;
         std::string const port;
+
+        asio::cancellation_signal stop_signal;
 
         impl(executor_type exec, std::string host, std::string port);
 
@@ -52,11 +55,9 @@ struct http_server
         session(tcp::socket sock);
     };
 
-    executor_type                          exec_;
-    std::vector< std::shared_ptr< impl > > impls_;
+    executor_type exec_;
 
-    void
-    shutdown();
+    std::vector< std::shared_ptr< impl > > impls_;
 
   public:
     http_server(executor_type exec);
@@ -67,6 +68,9 @@ struct http_server
 
     void
     serve(std::string host, std::string port);
+
+    void
+    shutdown();
 
     executor_type const &
     get_executor() const;
