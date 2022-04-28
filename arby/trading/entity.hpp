@@ -12,6 +12,7 @@
 
 #include "config/asio.hpp"
 
+#include <unordered_map>
 namespace arby
 {
 namespace trading
@@ -76,8 +77,10 @@ struct entity_impl : std::enable_shared_from_this< entity_impl >
     }
 
   private:
-    virtual void handle_start() = 0;
-    virtual void handle_stop() = 0;
+    virtual void
+    handle_start() = 0;
+    virtual void
+    handle_stop() = 0;
 
   private:
     executor_type        exec_;

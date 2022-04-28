@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <chrono>
 #include <iterator>
+#include <vector>
 
 namespace arby::util
 {

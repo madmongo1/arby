@@ -20,7 +20,12 @@ constexpr auto to_price     = [](json::value const &v) { return trading::price_t
 constexpr auto to_qty       = [](json::value const &v) { return trading::qty_type(v.as_string().c_str()); };
 constexpr auto to_side      = [](json::value const &v) { return *wise_enum::from_string< trading::side_type >(v.as_string()); };
 constexpr auto to_timestamp = [](json::value const &v)
-{ return std::chrono::system_clock::time_point(std::chrono::nanoseconds (::atol(v.as_string().c_str()))); };
+{
+    using namespace std::chrono;
+
+    auto nanos = nanoseconds(::atol(v.as_string().c_str()));
+    return system_clock::time_point(duration_cast< system_clock::duration >(nanos));
+};
 }   // namespace
 
 auto

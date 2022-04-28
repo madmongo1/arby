@@ -55,6 +55,8 @@ struct http_server
         session(tcp::socket sock);
     };
 
+    struct epilog;
+
     executor_type exec_;
 
     std::vector< std::shared_ptr< impl > > impls_;

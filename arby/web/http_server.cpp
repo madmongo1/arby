@@ -67,6 +67,27 @@ http_server::impl::serve(tcp::resolver::results_type::iterator first, tcp::resol
         return (serve(first->endpoint()) && serve(next, last));
 }
 
+struct http_server::epilog
+{
+    std::shared_ptr< http_server::impl > self;
+    std::string                          service;
+
+    void
+    operator()(std::exception_ptr ep) const
+    {
+        try
+        {
+            if (ep)
+                std::rethrow_exception(ep);
+            spdlog::info("http_server[{}:{}]::serve - {} finished", self->host, self->port, service);
+        }
+        catch (std::exception &e)
+        {
+            spdlog::error("http_server[{}:{}]::serve - {} exception: {}", self->host, self->port, service, e.what());
+        }
+    }
+};
+
 asio::awaitable< void >
 http_server::impl::serve(tcp::endpoint ep)
 {
@@ -84,21 +105,7 @@ http_server::impl::serve(tcp::endpoint ep)
         {
             auto sock = tcp::socket(co_await executor);
             co_await acceptor.async_accept(sock, use_awaitable);
-            co_spawn(co_await executor,
-                     session(std::move(sock)),
-                     [self = shared_from_this()](std::exception_ptr ep)
-                     {
-                         try
-                         {
-                             if (ep)
-                                 std::rethrow_exception(ep);
-                             spdlog::info("http_server[{}:{}]::serve - session finished", self->host, self->port);
-                         }
-                         catch (std::exception &e)
-                         {
-                             spdlog::error("http_server[{}:{}]::serve - session exception: {}", self->host, self->port, e.what());
-                         }
-                     });
+            co_spawn(co_await executor, session(std::move(sock)), epilog { .self = shared_from_this(), .service = "session" });
         }
     }
     catch (std::exception &e)
@@ -111,7 +118,18 @@ asio::awaitable< void >
 http_server::impl::session(tcp::socket sock)
 {
     using asio::use_awaitable;
+    using namespace asio::experimental::awaitable_operators;
+    using namespace std::literals;
+
     auto sentinel = util::monitor::record(fmt::format("{}::{}({})", classname, __func__, sock.remote_endpoint()));
+
+    auto timer   = asio::steady_timer(sock.get_executor());
+    auto timeout = [&timer]() -> asio::awaitable< void >
+    {
+        timer.expires_after(5s);
+        error_code ec;
+        co_await timer.async_wait(asio::redirect_error(use_awaitable, ec));
+    };
 
     auto request  = http::request< http::string_body >();
     auto response = http::response< http::string_body >();
@@ -120,13 +138,22 @@ http_server::impl::session(tcp::socket sock)
     {
         request.clear();
         request.body().clear();
-        co_await http::async_read(sock, rxbuf, request, use_awaitable);
+        response.clear();
+        response.body().clear();
+
+        if (auto which = co_await (timeout() || http::async_read(sock, rxbuf, request, use_awaitable)); which.index() == 0)
+            break;
+
+        spdlog::info("{}::{}({}) {} {}", classname, __func__, sock.remote_endpoint(), request.method_string(), request.target());
 
         // match path against installed services
 
-        response.clear();
-        response.body().clear();
-        response.body() = "Hello, World!\r\n";
+        // ... or default
+
+        response.result(http::status::not_found);
+        response.version(request.version());
+        response.keep_alive(request.keep_alive());
+        response.body() = fmt::format("No app registered that matches {}\r\n", request.target());
         response.prepare_payload();
         co_await http::async_write(sock, response, use_awaitable);
     } while (!response.need_eof());
@@ -194,19 +221,7 @@ http_server::serve(std::string host, std::string port)
              std::bind(&impl::run, my_impl),
              asio::bind_cancellation_slot(
                  my_impl->stop_signal.slot(),
-                 [my_impl](std::exception_ptr ep)
-                 {
-                     try
-                     {
-                         if (ep)
-                             std::rethrow_exception(ep);
-                         spdlog::info("web::http_server[{}:{}] run completed", my_impl->host, my_impl->port);
-                     }
-                     catch (std::exception &e)
-                     {
-                         spdlog::error("web::http_server[{}:{}] exception: {}", my_impl->host, my_impl->port, e.what());
-                     }
-                 }));
+                 epilog { .self = my_impl, .service = "serve" }));
 }
 
 }   // namespace arby::web
