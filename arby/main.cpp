@@ -16,6 +16,7 @@
 #include "power_trade/tick_logger.hpp"
 #include "trading/market_key.hpp"
 #include "util/monitor.hpp"
+#include "web/http_server.hpp"
 
 #include <boost/asio.hpp>
 #include <boost/asio/experimental/awaitable_operators.hpp>
@@ -100,20 +101,23 @@ check(ssl::context &sslctx)
 {
     auto this_exec = co_await asio::this_coro::executor;
 
+    auto http_server = web::http_server(this_exec);
+    http_server.serve("localhost", "8080");
     auto sentinel = util::monitor::record("check");
     auto con      = std::make_shared< power_trade::connector >(this_exec, sslctx);
-    auto eth_log  = power_trade::tick_logger(con, "ETH-USD", fs::temp_directory_path() / "eth-usd.txt");
+    /*
+        auto eth_log  = power_trade::tick_logger(con, "ETH-USD", fs::temp_directory_path() / "eth-usd.txt");
 
-    auto watch1        = power_trade::event_listener(con, "heartbeat");
-    auto watch2        = power_trade::orderbook_listener_impl::create(this_exec, con, trading::spot_key("eth/usd"));
-    auto [w2con, snap] = watch2->subscribe([](std::shared_ptr< power_trade::orderbook_snapshot const > snap)
-                                           { spdlog::info("*** snapshot *** {}", snap); });
-    spdlog::info("*** snapshot *** {}", snap);
-
-//    auto watch3         = power_trade::orderbook_listener_impl::create(this_exec, con, trading::spot_key("btc-usd"));
-//    auto [w3con, snap3] = watch3->subscribe([](std::shared_ptr< power_trade::orderbook_snapshot const > snap)
-//                                            { spdlog::info("*** snapshot *** {}", snap); });
-//    spdlog::info("*** snapshot *** {}", snap3);
+        auto watch1        = power_trade::event_listener(con, "heartbeat");
+        auto watch2        = power_trade::orderbook_listener_impl::create(this_exec, con, trading::spot_key("eth/usd"));
+        auto [w2con, snap] = watch2->subscribe([](std::shared_ptr< power_trade::orderbook_snapshot const > snap)
+                                               { spdlog::info("*** snapshot *** {}", snap); });
+        spdlog::info("*** snapshot *** {}", snap);
+    */
+    //    auto watch3         = power_trade::orderbook_listener_impl::create(this_exec, con, trading::spot_key("btc-usd"));
+    //    auto [w3con, snap3] = watch3->subscribe([](std::shared_ptr< power_trade::orderbook_snapshot const > snap)
+    //                                            { spdlog::info("*** snapshot *** {}", snap); });
+    //    spdlog::info("*** snapshot *** {}", snap3);
 
     asio::cancellation_signal cancel_sig;
     co_await monitor_quit(cancel_sig, *con);
