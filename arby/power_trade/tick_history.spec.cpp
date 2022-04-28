@@ -8,23 +8,43 @@
 //
 #include "power_trade/tick_history.hpp"
 
+#include "testing/test_environment.spec.hpp"
+
 #include <doctest/doctest.h>
+
+#include <fstream>
+#include <string>
+#include <tuple>
 
 using namespace arby;
 
 namespace
 {
-auto
-make_snap()
+struct
 {
-    return power_trade::tick_record { power_trade::tick_code::snapshot, std::make_shared< json::object >() };
-}
+    std::ifstream ifs { testing::source_root() / "arby/power_trade/test_data/eth-usd.txt" };
 
-auto
-make_add()
-{
-    return power_trade::tick_record { power_trade::tick_code::add, std::make_shared< json::object >() };
-}
+    std::tuple< std::string, std::shared_ptr< json::object const > >
+    next()
+    {
+        std::string                           buffer;
+        std::string                           type = "eof";
+        std::shared_ptr< json::object const > payload;
+        if (std::getline(ifs, buffer))
+        {
+            auto pv = std::make_shared< json::value const >(json::parse(buffer));
+
+            if (auto &outer = pv->as_object(); !outer.empty())
+            {
+                auto &[k, v] = *outer.begin();
+                type.assign(k.begin(), k.end());
+                payload = std::shared_ptr< json::object const >(pv, &v.as_object());
+            }
+        }
+        return std::make_tuple(type, payload);
+    }
+
+} tick_source;
 
 }   // namespace
 TEST_SUITE("power_trade")
@@ -33,13 +53,38 @@ TEST_SUITE("power_trade")
     {
         auto hist = power_trade::tick_history();
 
+        std::string                           type;
+        std::shared_ptr< json::object const > payload;
+
+        auto to_code = [](std::string const &type)
+        {
+            auto result = power_trade::tick_code();
+            if (type == "snapshot")
+                result = power_trade::tick_code::snapshot;
+            else if (type == "order_added")
+                result = power_trade::tick_code::add;
+            else if (type == "order_deleted")
+                result = power_trade::tick_code::remove;
+            else if (type == "order_executed")
+                result = power_trade::tick_code::execute;
+            else
+                FAIL("invalid code");
+            return result;
+        };
+
+        auto process_next = [&]
+        {
+            std::tie(type, payload) = tick_source.next();
+            hist.add_tick(power_trade::tick_record(to_code(type), payload));
+        };
+
         // first snapshot
-        hist.add_tick(make_snap());
+        process_next();
         auto s0 = hist.highest_sequence();
         hist.add_watermark(s0);
 
         // second snapshot
-        hist.add_tick(make_add());
+        process_next();
         auto s1 = hist.highest_sequence();
         hist.add_watermark(s1);
 
@@ -49,11 +94,11 @@ TEST_SUITE("power_trade")
         CHECK(hist.history.begin()->first == s1);
 
         // more snapshots
-        hist.add_tick(make_add());
+        process_next();
         auto s2 = hist.highest_sequence();
         hist.add_watermark(s2);
 
-        hist.add_tick(make_add());
+        process_next();
         auto s3 = hist.highest_sequence();
         hist.add_watermark(s3);
 

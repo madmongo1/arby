@@ -92,6 +92,12 @@ struct truncate_op : truncate_op_base
 truncate_op
 truncate(std::string_view sv, std::size_t limit = 256);
 
+inline truncate_op
+truncate(char const *sz, std::size_t limit = 256)
+{
+    return truncate(std::string_view(sz), limit);
+}
+
 truncate_op
 truncate(std::string const &s, std::size_t limit = 256);
 
@@ -104,6 +110,9 @@ struct json_truncate_op
 
     friend std::ostream &
     operator<<(std::ostream &os, json_truncate_op const &op);
+
+    friend std::string
+    to_string(json_truncate_op const &op);
 
     json::object const &o;
     std::size_t         limit;

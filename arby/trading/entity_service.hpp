@@ -16,19 +16,31 @@ namespace arby::trading
 {
 struct entity_service
 {
-    using executor_type = asio:an
+    using executor_type = asio::any_io_executor;
+
     struct impl
     {
+        impl(executor_type exec)
+        : exec_(exec)
+        {
+        }
+
+        executor_type const &
+        get_executor() const
+        {
+            return exec_;
+        }
+
+      private:
+        executor_type exec_;
     };
 
-    entity_service(asio::io_context & ioc)
-    : ioc_(&ioc)
+    entity_service(executor_type exec)
+    : impl_(std::make_shared< impl >(exec))
     {
-
-
     }
 
-    asio::io_context* ioc_;
+    std::shared_ptr< impl > impl_;
 };
 
 }   // namespace arby::trading

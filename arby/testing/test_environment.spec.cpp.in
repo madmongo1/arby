@@ -1,0 +1,11 @@
+#include "testing/test_environment.spec.hpp"
+
+namespace arby::testing
+{
+fs::path 
+source_root()
+{
+    return "${PROJECT_SOURCE_DIR}";
+}
+
+}

@@ -163,6 +163,12 @@ operator<<(std::ostream &os, const json_truncate_op &op)
     return os << s;
 }
 
+std::string
+to_string(json_truncate_op const &op)
+{
+    return json::serialize(op.o);
+}
+
 json_truncate_op
 truncate(json::object const &j, std::size_t limit)
 {
