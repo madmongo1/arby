@@ -4,13 +4,23 @@ include(FetchContent)
 
 project(Arby VERSION 0.1)
 
-find_package(Boost 1.79 REQUIRED COMPONENTS system thread filesystem container)
+#find_package(Boost 1.79 REQUIRED COMPONENTS system thread filesystem container)
+FetchContent_Declare(
+  boost
+  GIT_REPOSITORY https://github.com/boostorg/boost.git
+  GIT_TAG        boost-1.79.0
+  GIT_PROGRESS 1
+)
+FetchContent_MakeAvailable(boost)
+
+
 find_package(OpenSSL REQUIRED)
 find_package(Threads REQUIRED)
 FetchContent_Declare(
   fmtlib
   GIT_REPOSITORY https://github.com/fmtlib/fmt.git
   GIT_TAG        8.1.1
+  GIT_SHALLOW    1
 )
 FetchContent_MakeAvailable(fmtlib)
 
