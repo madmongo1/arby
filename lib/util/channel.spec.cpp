@@ -17,7 +17,6 @@ using namespace arby;
 
 TEST_SUITE("scratch")
 {
-
     TEST_CASE("channel close")
     {
         using asio::awaitable;
@@ -39,15 +38,17 @@ TEST_SUITE("scratch")
             ioc,
             [&]() -> awaitable< void >
             {
-                auto [e1, s1] = co_await ch.async_receive(as_tuple(use_awaitable));
-                CHECK(!e1);
-                CHECK(s1 == "Hello");
-                auto [e2, s2] = co_await ch.async_receive(as_tuple(use_awaitable));
-                CHECK(!e2);
-                CHECK(s2 == "World");
-                auto [e3, s3] = co_await ch.async_receive(as_tuple(use_awaitable));
-                CHECK(e3 == asio::error::eof);
-                CHECK(s3 == "");
+                error_code  e;
+                std::string s;
+                std::tie(e, s) = co_await ch.async_receive(as_tuple(use_awaitable));
+                CHECK(!e);
+                CHECK(s == "Hello");
+                std::tie(e, s) = co_await ch.async_receive(as_tuple(use_awaitable));
+                CHECK(!e);
+                CHECK(s == "World");
+                std::tie(e, s) = co_await ch.async_receive(as_tuple(use_awaitable));
+                CHECK(e == asio::error::eof);
+                CHECK(s == "");
             },
             [](std::exception_ptr ep) { CHECK(ep == nullptr); });
 

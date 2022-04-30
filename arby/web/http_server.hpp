@@ -11,6 +11,9 @@
 #define ARBY_WEB_HTTP_SERVER
 
 #include "config/asio.hpp"
+#include "web/http_app.hpp"
+
+#include <regex>
 
 namespace arby::web
 {
@@ -51,8 +54,29 @@ struct http_server
         asio::awaitable< void >
         serve(tcp::resolver::results_type range);
 
+        static
         asio::awaitable< void >
-        session(tcp::socket sock);
+        session(std::shared_ptr<impl> self, tcp::socket sock);
+    };
+
+    asio::awaitable< void > static protect(std::shared_ptr< impl > impl, asio::awaitable< void > a);
+
+    struct app_store
+    {
+        app_store(asio::any_io_executor exec);
+
+        struct app_entry
+        {
+            std::string def;
+            std::regex  re;
+            http_app    app;
+        };
+
+        void
+        add_app(std::string def, http_app app);
+
+        asio::any_io_executor    exec_;
+        std::vector< app_entry > store_;
     };
 
     struct epilog;
@@ -60,6 +84,7 @@ struct http_server
     executor_type exec_;
 
     std::vector< std::shared_ptr< impl > > impls_;
+    std::unique_ptr< app_store >           apps_;
 
   public:
     http_server(executor_type exec);
@@ -70,6 +95,9 @@ struct http_server
 
     void
     serve(std::string host, std::string port);
+
+    void
+    add_app(std::string re, http_app app);
 
     void
     shutdown();

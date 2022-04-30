@@ -13,8 +13,10 @@
 #include "asioex/scoped_interrupt.hpp"
 #include "config/http.hpp"
 #include "util/monitor.hpp"
+#include "web/http_app.hpp"
 
 #include <fmt/ostream.h>
+#include <fmt/ranges.h>
 #include <spdlog/spdlog.h>
 
 #include <cassert>
@@ -43,14 +45,50 @@ http_server::impl::impl(asio::any_io_executor exec, std::string host, std::strin
 asio::awaitable< void >
 http_server::impl::run()
 {
+    auto sentinel = util::monitor::record(fmt::format("{}::{}()", classname, __func__));
+
     auto ex = co_await asio::this_coro::executor;
 
     co_await serve(co_await resolve(host, port));
 }
 
+namespace
+{
+
+template < class T >
+struct printer;
+
+template <>
+struct printer< tcp::resolver::results_type >
+{
+    friend std::ostream &
+    operator<<(std::ostream &os, printer const &p)
+    {
+        os << "(";
+        const char *sep = "";
+        for (auto &&r : p.arg)
+        {
+            os << sep << r.endpoint();
+            sep = ", ";
+        }
+        return os << ")";
+    }
+
+    tcp::resolver::results_type const &arg;
+};
+
+template < class T >
+printer< T >
+print(T const &x)
+{
+    return printer< T > { x };
+}
+}   // namespace
+
 asio::awaitable< void >
 http_server::impl::serve(tcp::resolver::results_type endpoints)
 {
+    spdlog::debug("{}::{}({})", classname, __func__, print(endpoints));
     return serve(endpoints.begin(), endpoints.end());
 }
 
@@ -71,6 +109,13 @@ struct http_server::epilog
 {
     std::shared_ptr< http_server::impl > self;
     std::string                          service;
+    bool                                 deleted = false;
+
+    ~epilog()
+    {
+        assert(!deleted);
+        deleted = true;
+    }
 
     void
     operator()(std::exception_ptr ep) const
@@ -89,6 +134,12 @@ struct http_server::epilog
 };
 
 asio::awaitable< void >
+http_server::protect(std::shared_ptr< impl > impl, asio::awaitable< void > a)
+{
+    co_return co_await std::move(a);
+}
+
+asio::awaitable< void >
 http_server::impl::serve(tcp::endpoint ep)
 {
     using asio::co_spawn;
@@ -97,25 +148,33 @@ http_server::impl::serve(tcp::endpoint ep)
 
     auto sentinel = util::monitor::record(fmt::format("{}::{}({})", classname, __func__, ep));
 
-    try
+    auto epilog = [this](std::exception_ptr ep)
     {
-        auto acceptor = tcp::acceptor(co_await executor, ep);
-        acceptor.listen();
-        for (;;)
+        try
         {
-            auto sock = tcp::socket(co_await executor);
-            co_await acceptor.async_accept(sock, use_awaitable);
-            co_spawn(co_await executor, session(std::move(sock)), epilog { .self = shared_from_this(), .service = "session" });
+            if (ep)
+                std::rethrow_exception(ep);
+            spdlog::info("http_server[{}:{}]::serve - serve finished", host, port);
         }
-    }
-    catch (std::exception &e)
+        catch (std::exception &e)
+        {
+            spdlog::error("http_server[{}:{}]::serve - serve exception: {}", host, port, e.what());
+        }
+    };
+
+    auto run_session = [](std::shared_ptr< impl > self, tcp::socket &&sock) { return session(self, std::move(sock)); };
+
+    for (;;)
     {
-        spdlog::error("http_server[{}:{}]::serve - accept exception: {}", host, port, e.what());
+        auto acceptor = tcp::acceptor(co_await executor, ep, true);
+        auto sock     = tcp::socket(co_await executor);
+        co_await acceptor.async_accept(sock, use_awaitable);
+        co_spawn(co_await executor, run_session(shared_from_this(), std::move(sock)), epilog);
     }
 }
 
 asio::awaitable< void >
-http_server::impl::session(tcp::socket sock)
+http_server::impl::session(std::shared_ptr< impl > self, tcp::socket sock)
 {
     using asio::use_awaitable;
     using namespace asio::experimental::awaitable_operators;
@@ -138,8 +197,6 @@ http_server::impl::session(tcp::socket sock)
     {
         request.clear();
         request.body().clear();
-        response.clear();
-        response.body().clear();
 
         if (auto which = co_await (timeout() || http::async_read(sock, rxbuf, request, use_awaitable)); which.index() == 0)
             break;
@@ -149,14 +206,7 @@ http_server::impl::session(tcp::socket sock)
         // match path against installed services
 
         // ... or default
-
-        response.result(http::status::not_found);
-        response.version(request.version());
-        response.keep_alive(request.keep_alive());
-        response.body() = fmt::format("No app registered that matches {}\r\n", request.target());
-        response.prepare_payload();
-        co_await http::async_write(sock, response, use_awaitable);
-    } while (!response.need_eof());
+    } while (co_await http_app_base()(sock, request));
 
     co_return;
 }
@@ -171,17 +221,36 @@ void
 http_server::impl::stop()
 {
     assert(asioex::on_correct_thread(get_executor()));
+    spdlog::debug("{}::{}", classname, __func__);
     asioex::terminate(stop_signal);
 }
+
+// ===== app_store =====
+
+http_server::app_store::app_store(asio::any_io_executor exec)
+: exec_(exec)
+{
+}
+
+void
+http_server::app_store::add_app(std::string def, http_app app)
+{
+    auto re = std::regex(def, std::regex_constants::icase);
+    store_.push_back(app_entry { .def = std::move(def), .re = std::move(re), .app = std::move(app) });
+}
+
+// ===== http_server =====
 
 http_server::http_server(executor_type exec)
 : exec_(std::move(exec))
 , impls_()
+, apps_(std::make_unique< app_store >(exec_))
 {
 }
 
 http_server::http_server(http_server &&other)
 : impls_(std::move(other.impls_))
+, apps_(std::move(other.apps_))
 {
 }
 
@@ -190,6 +259,7 @@ http_server::operator=(http_server &&other)
 {
     shutdown();
     impls_ = std::move(other.impls_);
+    apps_  = std::move(other.apps_);
     return *this;
 }
 
@@ -219,9 +289,12 @@ http_server::serve(std::string host, std::string port)
     impls_.push_back(my_impl);
     co_spawn(my_impl->get_executor(),
              std::bind(&impl::run, my_impl),
-             asio::bind_cancellation_slot(
-                 my_impl->stop_signal.slot(),
-                 epilog { .self = my_impl, .service = "serve" }));
+             asio::bind_cancellation_slot(my_impl->stop_signal.slot(), epilog { .self = my_impl, .service = "serve" }));
 }
 
+void
+http_server::add_app(std::string text, http_app app)
+{
+    apps_->add_app(std::move(text), std::move(app));
+}
 }   // namespace arby::web

@@ -22,7 +22,7 @@ namespace
 {
 struct
 {
-    std::ifstream ifs { testing::source_root() / "arby/power_trade/test_data/eth-usd.txt" };
+    std::ifstream ifs { (testing::source_root() / "arby/power_trade/test_data/eth-usd.txt").c_str() };
 
     std::tuple< std::string, std::shared_ptr< json::object const > >
     next()

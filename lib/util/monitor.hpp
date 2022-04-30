@@ -56,7 +56,7 @@ struct monitor
     record(std::string name);
 
     static void
-    erase(instance_iter iter);
+    erase(instance_iter iter, std::exception_ptr ep);
 
     static asio::awaitable< void >
     mon();

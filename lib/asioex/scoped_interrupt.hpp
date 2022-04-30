@@ -46,15 +46,10 @@ struct scoped_interrupt
     : slot_(std::move(slot))
     {
         slot_.assign(
-            [slot = slot_, next = std::forward< InterruptHandler >(interrupt_handler), type_allowed](
-                asio::cancellation_type type) mutable
+            [next = std::forward< InterruptHandler >(interrupt_handler), type_allowed](asio::cancellation_type type)
             {
                 if (static_cast< int >(type) & static_cast< int >(type_allowed))
-                {
-                    auto copy = std::move(next);
-                    slot.clear();
-                    copy();
-                }
+                    next();
             });
     }
 

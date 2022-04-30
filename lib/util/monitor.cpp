@@ -11,9 +11,9 @@
 
 #include <fmt/chrono.h>
 #include <fmt/ostream.h>
-#include <tuple>
 #include <spdlog/spdlog.h>
 
+#include <tuple>
 
 namespace arby::util
 {
@@ -46,7 +46,9 @@ monitor::sentinel::sentinel(monitor::sentinel &&other)
 monitor::sentinel::~sentinel()
 {
     if (valid)
-        monitor::erase(iter);
+    {
+        monitor::erase(iter, std::current_exception());
+    }
 }
 monitor::sentinel
 monitor::record(std::string name)
@@ -59,9 +61,22 @@ monitor::record(std::string name)
     return result;
 }
 void
-monitor::erase(monitor::instance_iter iter)
+monitor::erase(monitor::instance_iter iter, std::exception_ptr ep)
 {
-    spdlog::debug("monitor: destroy {}", *iter);
+    try
+    {
+        if (ep)
+            std::rethrow_exception(ep);
+        spdlog::debug("monitor: destroy {}", *iter);
+    }
+    catch (std::exception &e)
+    {
+        spdlog::error("monitor: destroy {} with exception {}", *iter, e.what());
+    }
+    catch (...)
+    {
+        spdlog::error("monitor: destroy {} with unknown exception");
+    }
     instances_.erase(iter);
 }
 asio::awaitable< void >
