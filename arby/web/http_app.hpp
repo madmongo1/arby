@@ -31,6 +31,9 @@ struct http_app
     static http_app
     create(Args &&...args);
 
+    asio::awaitable< bool >
+    operator()(tcp::socket &stream, http::request< http::string_body > &request);
+
   private:
     std::shared_ptr< http_app_base > impl_;
 };
@@ -41,7 +44,7 @@ template < class T, class... Args >
 http_app
 http_app::create(Args &&...args)
 {
-    return http_app(std::make_shared< T >(std::forward< Args... >(args...)));
+    return http_app(std::make_shared< T >(std::forward< Args >(args)...));
 }
 
 }   // namespace arby::web

@@ -18,6 +18,7 @@
 #include "trading/market_key.hpp"
 #include "util/monitor.hpp"
 #include "web/http_server.hpp"
+#include "web/entity_inspect_app.hpp"
 
 #include <boost/asio.hpp>
 #include <boost/asio/experimental/awaitable_operators.hpp>
@@ -137,6 +138,8 @@ check(ssl::context &sslctx)
 
     auto http_server = web::http_server(this_exec);
     http_server.serve("localhost", "8080");
+    http_server.add_app("^/entities/?$", web::http_app::create<web::entity_inspect_app>());
+
     sigs::scoped_connection qcon1 = key_signals['q'].connect([&] { http_server.shutdown(); });
 
     auto con     = std::make_shared< power_trade::connector >(this_exec, sslctx);

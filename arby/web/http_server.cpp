@@ -35,10 +35,11 @@ resolve(std::string const &host, std::string const &port)
 }
 }   // namespace
 
-http_server::impl::impl(asio::any_io_executor exec, std::string host, std::string port)
+http_server::impl::impl(asio::any_io_executor exec, std::string host, std::string port, std::shared_ptr< app_store > apps)
 : exec_(exec)
 , host(host)
 , port(port)
+, apps_(apps)
 {
 }
 
@@ -190,8 +191,9 @@ http_server::impl::session(std::shared_ptr< impl > self, tcp::socket sock)
         co_await timer.async_wait(asio::redirect_error(use_awaitable, ec));
     };
 
-    auto request  = http::request< http::string_body >();
-    auto rxbuf    = beast::flat_buffer();
+    auto request = http::request< http::string_body >();
+    auto rxbuf   = beast::flat_buffer();
+    auto again   = false;
     do
     {
         request.clear();
@@ -204,8 +206,37 @@ http_server::impl::session(std::shared_ptr< impl > self, tcp::socket sock)
 
         // match path against installed services
 
+        auto handled = false;
+        again        = false;
+
+        for (auto &entry : self->apps_->store_)
+        {
+            auto match = std::cmatch();
+            if (std::regex_match(request.target().data(), request.target().data() + request.target().size(), match, entry.re))
+            {
+                again   = co_await entry.app(sock, request);
+                handled = true;
+                break;
+            }
+        }
+
+        if (!handled)
+        {
+            auto response = http::response< http::string_body >();
+            response.result(http::status::not_found);
+            response.version(request.version());
+            response.keep_alive(request.keep_alive());
+            response.body() = fmt::format("No app registered that matches {}\r\n", request.target());
+            response.body() += "Valid route regexes are:\r\n";
+            for (auto &entry : self->apps_->store_)
+                response.body() += entry.def + "\r\n";
+            response.prepare_payload();
+            co_await http::async_write(sock, response, use_awaitable);
+            again = !response.need_eof();
+        }
+
         // ... or default
-    } while (co_await http_app_base()(sock, request));
+    } while (again);
 
     co_return;
 }
@@ -284,7 +315,7 @@ http_server::get_executor() const -> executor_type const &
 void
 http_server::serve(std::string host, std::string port)
 {
-    auto my_impl = std::make_shared< impl >(get_executor(), host, port);
+    auto my_impl = std::make_shared< impl >(get_executor(), host, port, apps_);
     impls_.push_back(my_impl);
     co_spawn(my_impl->get_executor(),
              std::bind(&impl::run, my_impl),

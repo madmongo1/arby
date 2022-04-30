@@ -23,17 +23,36 @@ struct http_server
     using executor_type               = asio::any_io_executor;
 
   private:
+    struct app_store
+    {
+        app_store(asio::any_io_executor exec);
+
+        struct app_entry
+        {
+            std::string def;
+            std::regex  re;
+            http_app    app;
+        };
+
+        void
+        add_app(std::string def, http_app app);
+
+        asio::any_io_executor    exec_;
+        std::vector< app_entry > store_;
+    };
+
     class impl : public std::enable_shared_from_this< impl >
     {
         executor_type exec_;
 
       public:
-        std::string const host;
-        std::string const port;
+        std::string const            host;
+        std::string const            port;
+        std::shared_ptr< app_store > apps_;
 
         asio::cancellation_signal stop_signal;
 
-        impl(executor_type exec, std::string host, std::string port);
+        impl(executor_type exec, std::string host, std::string port, std::shared_ptr< app_store > apps);
 
         executor_type const &
         get_executor() const;
@@ -54,37 +73,18 @@ struct http_server
         asio::awaitable< void >
         serve(tcp::resolver::results_type range);
 
-        static
-        asio::awaitable< void >
-        session(std::shared_ptr<impl> self, tcp::socket sock);
+        static asio::awaitable< void >
+        session(std::shared_ptr< impl > self, tcp::socket sock);
     };
 
     asio::awaitable< void > static protect(std::shared_ptr< impl > impl, asio::awaitable< void > a);
-
-    struct app_store
-    {
-        app_store(asio::any_io_executor exec);
-
-        struct app_entry
-        {
-            std::string def;
-            std::regex  re;
-            http_app    app;
-        };
-
-        void
-        add_app(std::string def, http_app app);
-
-        asio::any_io_executor    exec_;
-        std::vector< app_entry > store_;
-    };
 
     struct epilog;
 
     executor_type exec_;
 
     std::vector< std::shared_ptr< impl > > impls_;
-    std::unique_ptr< app_store >           apps_;
+    std::shared_ptr< app_store >           apps_;
 
   public:
     http_server(executor_type exec);

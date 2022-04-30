@@ -35,4 +35,10 @@ http_app::http_app(std::shared_ptr< http_app_base > impl)
 {
 }
 
+asio::awaitable< bool >
+http_app::operator()(tcp::socket &stream, http::request< http::string_body > &request)
+{
+    co_return co_await impl_->operator()(stream, request);
+}
+
 }   // namespace arby::web

@@ -9,6 +9,7 @@
 
 #ifndef ARBY_ENTITY_ENTITY_SERVICE_HPP
 #define ARBY_ENTITY_ENTITY_SERVICE_HPP
+
 #include "config/asio.hpp"
 
 #include <map>
@@ -20,9 +21,9 @@
 namespace arby::entity
 {
 
-using entity_key = std::string;
-
 struct entity_base;
+
+using entity_key = std::string;
 
 struct entity_service
 {
@@ -67,6 +68,19 @@ struct entity_service
                     cache_.erase(iinfo);
             }
         }
+
+        template < class F >
+        void
+        enumerate(F &&f)
+        {
+            auto lock       = std::unique_lock(m_);
+            auto cache_copy = this->cache_;
+            lock.unlock();
+            for (auto &[k, info] : cache_copy)
+                for (auto &[version, weak] : info.weak_)
+                    if (auto p = weak.lock())
+                        f(p);
+        }
     };
 
     using implementation_type = impl *;
@@ -94,36 +108,13 @@ struct entity_service
     {
         return get_implementation()->remove(key, version);
     }
-};
 
-struct entity_base : std::enable_shared_from_this< entity_base >
-{
-    entity_base(asio::any_io_executor exec, entity_service entity_svc)
-    : exec_(exec)
-    , entity_svc_(entity_svc)
-    {
-    }
-
+    template < class F >
     void
-    prepare()
+    enumerate(F &&f)
     {
+        get_implementation()->enumerate(f);
     }
-
-    void
-    start()
-    {
-    }
-
-    virtual ~entity_base() = default;
-
-    asio::any_io_executor const &
-    get_executor() const
-    {
-        return exec_;
-    }
-
-    asio::any_io_executor exec_;
-    entity_service        entity_svc_;
 };
 
 }   // namespace arby::entity

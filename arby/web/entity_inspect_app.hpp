@@ -10,18 +10,20 @@
 #ifndef ARBY_ENTITY_INSPECT_APP_HPP
 #define ARBY_ENTITY_INSPECT_APP_HPP
 
-#include "web/http_app.hpp"
 #include "entity/entity_service.hpp"
+#include "web/http_app.hpp"
 
 namespace arby
 {
 namespace web
 {
 
-struct entity_inspect_app : http_app
+struct entity_inspect_app : http_app_base
 {
+    virtual asio::awaitable< bool >
+    operator()(tcp::socket &stream, http::request< http::string_body > &request) override;
 
-    entity::entity_service entity_service_;
+    entity::entity_service entity_service_ = entity::entity_service();
 };
 
 }   // namespace web
