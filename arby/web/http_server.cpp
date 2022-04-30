@@ -191,7 +191,6 @@ http_server::impl::session(std::shared_ptr< impl > self, tcp::socket sock)
     };
 
     auto request  = http::request< http::string_body >();
-    auto response = http::response< http::string_body >();
     auto rxbuf    = beast::flat_buffer();
     do
     {
