@@ -15,10 +15,11 @@
 #include "power_trade/native_symbol.hpp"
 #include "power_trade/orderbook_listener_impl.hpp"
 #include "power_trade/tick_logger.hpp"
+#include "reactive/fix_connector.hpp"
 #include "trading/market_key.hpp"
 #include "util/monitor.hpp"
-#include "web/http_server.hpp"
 #include "web/entity_inspect_app.hpp"
+#include "web/http_server.hpp"
 
 #include <boost/asio.hpp>
 #include <boost/asio/experimental/awaitable_operators.hpp>
@@ -136,9 +137,19 @@ check(ssl::context &sslctx)
     std::unordered_map< char, sigs::signal< void() > > key_signals;
     sigs::scoped_connection                            qcon0 = key_signals['q'].connect([&] { asioex::terminate(stop_monitor); });
 
+    auto reactive = std::make_unique< reactive::fix_connector >(
+        this_exec,
+        sslctx,
+        reactive::fix_connector_args { .sender_comp_id      = "POWERTRADE_MD_1",
+                                       .target_comp_id      = "SWITCHBOARD_DEMO",
+                                       .socket_connect_host = "fix.demo.switchboard.reactivemarkets.com",
+                                       .socket_connect_port = "8289",
+                                       .use_ssl             = true });
+    auto rcon = key_signals['r'].connect([&] { reactive.reset(); });
+
     auto http_server = web::http_server(this_exec);
     http_server.serve("localhost", "8080");
-    http_server.add_app("^/entities/?$", web::http_app::create<web::entity_inspect_app>());
+    http_server.add_app("^/entities/?$", web::http_app::create< web::entity_inspect_app >());
 
     sigs::scoped_connection qcon1 = key_signals['q'].connect([&] { http_server.shutdown(); });
 
@@ -146,11 +157,11 @@ check(ssl::context &sslctx)
     auto watch1  = std::make_unique< power_trade::event_listener >(con, "heartbeat");
     auto eth_log = std::make_unique< power_trade::tick_logger >(con, "ETH-USD", fs::temp_directory_path() / "eth-usd.txt");
 
-    auto watch2        = power_trade::orderbook_listener_impl::create(this_exec, con, trading::spot_key("eth/usd"));
+    auto                    watch2 = power_trade::orderbook_listener_impl::create(this_exec, con, trading::spot_key("eth/usd"));
     sigs::scoped_connection w2con;
     std::shared_ptr< power_trade::orderbook_snapshot const > snap;
     std::tie(w2con, snap) = watch2->subscribe([](std::shared_ptr< power_trade::orderbook_snapshot const > snap)
-                                           { spdlog::info("*** snapshot *** {}", snap); });
+                                              { spdlog::info("*** snapshot *** {}", snap); });
     spdlog::info("*** snapshot *** {}", snap);
     //    auto watch3         = power_trade::orderbook_listener_impl::create(this_exec, con, trading::spot_key("btc-usd"));
     //    auto [w3con, snap3] = watch3->subscribe([](std::shared_ptr< power_trade::orderbook_snapshot const > snap)
