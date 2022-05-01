@@ -31,6 +31,14 @@ key_values::operator==(const key_values &other) const
 {
     return values_.get() == other.values_.get();
 }
+
+key_values
+key_values::empty()
+{
+    static values_map const data;
+    static auto const       values = std::shared_ptr< values_map const >(&data, []< class T >(T *) noexcept {});
+    return key_values(values);
+}
 key_values
 mutable_key_values::lock() &&
 {
@@ -47,6 +55,28 @@ hash_value(const entity_key &key)
     assert(key.locked_);
     return key.cpphash_;
 }
+
+namespace
+{
+void
+stringify(std::string &target, unsigned char const (&digest)[SHA_DIGEST_LENGTH])
+{
+    target.resize(SHA_DIGEST_LENGTH * 2);
+
+    auto to_hex = [](unsigned char nibble)
+    {
+        static const char digits[] = "0123456789abcdef";
+        return digits[nibble];
+    };
+    auto out = target.data();
+    for (unsigned char byte : digest)
+    {
+        *out++ = to_hex(byte >> 4);
+        *out++ = to_hex(byte & 0xf);
+    }
+}
+}   // namespace
+
 void
 entity_key::lock()
 {
@@ -69,7 +99,8 @@ entity_key::lock()
     }
 
     unsigned char digest[SHA_DIGEST_LENGTH];
-    SHA1_Final(sha1hash_.data(), &shactx);
+    SHA1_Final(digest, &shactx);
+    stringify(sha1hash_, digest);
 
     locked_ = true;
 }
@@ -96,16 +127,7 @@ operator<<(std::ostream &os, const entity_key &key)
 {
     if (key.locked_)
     {
-        auto to_hex = [](unsigned char nibble)
-        {
-            static const char digits[] = "0123456789abcdef";
-            return digits[nibble];
-        };
-        for (unsigned char byte : key.sha1hash_)
-        {
-            os << to_hex(byte >> 4);
-            os << to_hex(byte & 0xf);
-        }
+        os << key.sha1hash_;
     }
     else
     {
@@ -117,5 +139,46 @@ operator<<(std::ostream &os, const entity_key &key)
 
     return os;
 }
+
+bool
+entity_key::operator==(const entity_key &other) const
+{
+    assert(locked_);
+    assert(other.locked_);
+
+    if (cpphash_ != other.cpphash_)
+        return false;
+    if (used_ != other.used_)
+        return false;
+    for (auto &&k : used_)
+        if (values_.at(k) != other.values_.at(k))
+            return false;
+
+    return true;
+}
+
+bool
+entity_key::operator<(entity_key const &other) const
+{
+    assert(locked_);
+    assert(other.locked_);
+
+    if (!(used_ < other.used_))
+        return false;
+
+    for (auto &&k : used_)
+        if (!(values_.at(k) < other.values_.at(k)))
+            return false;
+
+    return true;
+}
+
+std::string const &
+entity_key::sha1_digest() const
+{
+    assert(locked_);
+    return sha1hash_;
+}
+
 }   // namespace entity
 }   // namespace arby

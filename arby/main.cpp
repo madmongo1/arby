@@ -18,7 +18,8 @@
 #include "reactive/fix_connector.hpp"
 #include "trading/market_key.hpp"
 #include "util/monitor.hpp"
-#include "web/entity_inspect_app.hpp"
+#include "web/entity_detail_app.hpp"
+#include "web/entity_summary_app.hpp"
 #include "web/http_server.hpp"
 
 #include <boost/asio.hpp>
@@ -149,7 +150,8 @@ check(ssl::context &sslctx)
 
     auto http_server = web::http_server(this_exec);
     http_server.serve("localhost", "8080");
-    http_server.add_app("^/entities/?$", web::http_app::create< web::entity_inspect_app >());
+    http_server.add_app("^/entities/?$", web::http_app::create< web::entity_summary_app >());
+    http_server.add_app("^/entities/([0123456789abcdef]{40})(?:.([0-9]+))?/?$", web::http_app::create< web::entity_detail_app >());
 
     sigs::scoped_connection qcon1 = key_signals['q'].connect([&] { http_server.shutdown(); });
 

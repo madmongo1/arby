@@ -7,8 +7,8 @@
 // Official repository: https://github.com/madmongo1/arby
 //
 
-#ifndef ARBY_ENTITY_INSPECT_APP_HPP
-#define ARBY_ENTITY_INSPECT_APP_HPP
+#ifndef ARBY_WEB_ENTITY_SUMMARY_APP_HPP
+#define ARBY_WEB_ENTITY_SUMMARY_APP_HPP
 
 #include "entity/entity_service.hpp"
 #include "web/http_app.hpp"
@@ -18,10 +18,10 @@ namespace arby
 namespace web
 {
 
-struct entity_inspect_app : http_app_base
+struct entity_summary_app : http_app_base
 {
     virtual asio::awaitable< bool >
-    operator()(tcp::socket &stream, http::request< http::string_body > &request) override;
+    operator()(tcp::socket &stream, http::request< http::string_body > &request, std::cmatch& match) override;
 
     entity::entity_service entity_service_ = entity::entity_service();
 };
@@ -29,4 +29,4 @@ struct entity_inspect_app : http_app_base
 }   // namespace web
 }   // namespace arby
 
-#endif   // ARBY_ENTITY_INSPECT_APP_HPP
+#endif   // ARBY_WEB_ENTITY_SUMMARY_APP_HPP

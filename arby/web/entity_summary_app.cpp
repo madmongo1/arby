@@ -7,7 +7,7 @@
 // Official repository: https://github.com/madmongo1/arby
 //
 
-#include "entity_inspect_app.hpp"
+#include "entity_summary_app.hpp"
 
 #include "entity/entity_base.hpp"
 
@@ -58,7 +58,7 @@ struct async_condition_variable
 };
 
 asio::awaitable< bool >
-entity_inspect_app::operator()(tcp::socket &stream, http::request< http::string_body > &request)
+entity_summary_app::operator()(tcp::socket &stream, http::request< http::string_body > &request, std::cmatch&)
 {
     auto this_exec = co_await asio::this_coro::executor;
 

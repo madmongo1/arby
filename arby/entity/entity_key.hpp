@@ -26,6 +26,11 @@ namespace entity
 
 struct key_values
 {
+    using values_map = std::unordered_map< std::string, std::string >;
+
+    static key_values
+    empty();
+
     key_values(std::shared_ptr< std::unordered_map< std::string, std::string > const > values);
 
     std::string const &
@@ -48,7 +53,7 @@ struct mutable_key_values
 
 struct entity_key
 {
-    entity_key(key_values values);
+    explicit entity_key(key_values values = key_values::empty());
 
     friend std::size_t
     hash_value(entity_key const &key);
@@ -62,32 +67,24 @@ struct entity_key
     void
     merge(entity_key const &other);
 
+    std::string const &
+    sha1_digest() const;
+
     bool
-    operator==(entity_key const &other)
-    {
-        assert(locked_);
-        assert(other.locked_);
+    operator==(entity_key const &other) const;
 
-        if (cpphash_ != other.cpphash_)
-            return false;
-        if (used_ != other.used_)
-            return false;
-        for (auto &&k : used_)
-            if (values_.at(k) != other.values_.at(k))
-                return false;
-
-        return true;
-    }
+    bool
+    operator<(entity_key const &other) const;
 
     friend std::ostream &
     operator<<(std::ostream &os, entity_key const &key);
 
   private:
-    key_values                      values_;
-    std::set< std::string >         used_;
-    std::size_t                     cpphash_;
-    std::array< unsigned char, 20 > sha1hash_;
-    bool                            locked_ = false;
+    key_values              values_;
+    std::set< std::string > used_;
+    std::size_t             cpphash_;
+    std::string             sha1hash_;
+    bool                    locked_ = false;
 };
 
 struct unlocked_entity_key

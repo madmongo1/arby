@@ -12,6 +12,7 @@
 #include "asioex/helpers.hpp"
 
 #include <fmt/format.h>
+#include <fmt/ostream.h>
 
 namespace arby
 {
@@ -28,7 +29,7 @@ entity_base::summary() const
 {
     assert(asioex::on_correct_thread(get_executor()));
 
-    auto buffer = fmt::format("{}[{}.{}] : ", classname(), key_, entity_version_);
+    auto buffer = fmt::format("{}[{}.{}] ({}) : ", classname(), key_, entity_version_, this->estate_);
     extend_summary(buffer);
     return buffer;
 }
@@ -48,6 +49,43 @@ entity_key const &
 entity_base::key() const
 {
     return key_;
+}
+void
+entity_base::prepare()
+{
+    assert(estate_ == not_started);
+    do_prepare();
+    key_.lock();
+    estate_ = prepared;
+}
+void
+entity_base::start()
+{
+    using asio::bind_executor;
+    using asio::dispatch;
+
+    assert(estate_ == prepared);
+
+    entity_version_ = entity_svc_.notify(key_, weak_from_this());
+
+    dispatch(bind_executor(get_executor(), [self = shared_from_this()] { self->handle_start(); }));
+    estate_ = started;
+}
+entity_base::entity_base(asio::any_io_executor exec, entity_service entity_svc)
+    : exec_(exec)
+    , entity_svc_(entity_svc)
+{
+}
+void
+entity_base::stop()
+{
+    using asio::bind_executor;
+    using asio::dispatch;
+
+    assert(estate_ == started);
+
+    dispatch(bind_executor(get_executor(), [self = shared_from_this()] { self->handle_stop(); }));
+    estate_ = stopped;
 }
 }   // namespace entity
 }   // namespace arby

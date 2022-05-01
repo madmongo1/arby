@@ -13,6 +13,8 @@
 #include "config/asio.hpp"
 #include "config/http.hpp"
 
+#include <regex>
+
 namespace arby::web
 {
 struct http_app_base
@@ -20,7 +22,7 @@ struct http_app_base
     virtual ~http_app_base() = default;
 
     virtual asio::awaitable< bool >
-    operator()(tcp::socket &stream, http::request< http::string_body > &request);
+    operator()(tcp::socket &stream, http::request< http::string_body > &request, std::cmatch&);
 };
 
 struct http_app
@@ -32,7 +34,7 @@ struct http_app
     create(Args &&...args);
 
     asio::awaitable< bool >
-    operator()(tcp::socket &stream, http::request< http::string_body > &request);
+    operator()(tcp::socket &stream, http::request< http::string_body > &request, std::cmatch &match);
 
   private:
     std::shared_ptr< http_app_base > impl_;

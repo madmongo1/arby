@@ -16,7 +16,7 @@ namespace arby::web
 {
 
 asio::awaitable< bool >
-http_app_base::operator()(tcp::socket &stream, http::request< http::string_body > &request)
+http_app_base::operator()(tcp::socket &stream, http::request< http::string_body > &request, std::cmatch&)
 {
     using asio::use_awaitable;
 
@@ -36,9 +36,9 @@ http_app::http_app(std::shared_ptr< http_app_base > impl)
 }
 
 asio::awaitable< bool >
-http_app::operator()(tcp::socket &stream, http::request< http::string_body > &request)
+http_app::operator()(tcp::socket &stream, http::request< http::string_body > &request, std::cmatch& match)
 {
-    co_return co_await impl_->operator()(stream, request);
+    co_return co_await impl_->operator()(stream, request, match);
 }
 
 }   // namespace arby::web

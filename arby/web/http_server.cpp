@@ -214,7 +214,7 @@ http_server::impl::session(std::shared_ptr< impl > self, tcp::socket sock)
             auto match = std::cmatch();
             if (std::regex_match(request.target().data(), request.target().data() + request.target().size(), match, entry.re))
             {
-                again   = co_await entry.app(sock, request);
+                again   = co_await entry.app(sock, request, match);
                 handled = true;
                 break;
             }

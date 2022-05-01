@@ -31,45 +31,16 @@ struct entity_base : std::enable_shared_from_this< entity_base >
     virtual std::string_view
     classname() const;
 
-    entity_base(asio::any_io_executor exec, entity_service entity_svc)
-    : exec_(exec)
-    , entity_svc_(entity_svc)
-    {
-    }
+    entity_base(asio::any_io_executor exec, entity_service entity_svc);
 
     void
-    prepare()
-    {
-        assert(estate_ == not_started);
-        do_prepare();
-        estate_ = prepared;
-    }
+    prepare();
 
     void
-    start()
-    {
-        using asio::bind_executor;
-        using asio::dispatch;
-
-        assert(estate_ == prepared);
-
-        entity_version_ = entity_svc_.notify(key_, weak_from_this());
-
-        dispatch(bind_executor(get_executor(), [self = shared_from_this()] { self->handle_start(); }));
-        estate_ = started;
-    }
+    start();
 
     void
-    stop()
-    {
-        using asio::bind_executor;
-        using asio::dispatch;
-
-        assert(estate_ == started);
-
-        dispatch(bind_executor(get_executor(), [self = shared_from_this()] { self->handle_stop(); }));
-        estate_ = stopped;
-    }
+    stop();
 
     /// Summarise the object in a one-line report.
     /// @param buffer appends to this string. Does not add a newline.
