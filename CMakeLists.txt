@@ -4,14 +4,19 @@ include(FetchContent)
 
 project(Arby VERSION 0.1)
 
-#find_package(Boost 1.79 REQUIRED COMPONENTS system thread filesystem container)
-FetchContent_Declare(
-  boost
-  GIT_REPOSITORY https://github.com/boostorg/boost.git
-  GIT_TAG        boost-1.79.0
-  GIT_PROGRESS 1
-)
-FetchContent_MakeAvailable(boost)
+
+option(ARBY_FIND_BOOST "Find boost somewhere else" OFF)
+if (ARBY_FIND_BOOST)
+    find_package(Boost 1.79 REQUIRED COMPONENTS system thread filesystem container)
+else()
+    FetchContent_Declare(
+      boost
+      GIT_REPOSITORY https://github.com/boostorg/boost.git
+      GIT_TAG        boost-1.79.0
+      GIT_PROGRESS 1
+    )
+    FetchContent_MakeAvailable(boost)
+endif()
 
 
 find_package(OpenSSL REQUIRED)
