@@ -1,0 +1,6 @@
+<component name="CopyrightManager">
+  <copyright>
+    <option name="notice" value="Copyright (c) &amp;#36;originalComment.match(&quot;Copyright \(c\) (\d+)&quot;, 1, &quot;-&quot;, &quot;&amp;#36;today.year&quot;)&amp;#36;today.year Richard Hodges (hodges.r@gmail.com)&#10;&#10;Distributed under the Boost Software License, Version 1.0. (See accompanying&#10;file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)&#10;&#10;Official repository: https://github.com/madmongo1/arby&#10;" />
+    <option name="myName" value="arby" />
+  </copyright>
+</component>
