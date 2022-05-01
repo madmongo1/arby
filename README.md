@@ -42,6 +42,7 @@ __pycache__/
 
 You can then enable this user-wide .gitignore by modifying the .gitconfig in your home directory:
 
+~/.gitconfig:
 ```
 # This is Git's per-user configuration file.
 [user]
