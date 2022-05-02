@@ -29,6 +29,9 @@ struct fix_connector_args
     std::string socket_connect_host;
     std::string socket_connect_port;
     bool        use_ssl;
+
+    entity::entity_key
+    to_key() const;
 };
 
 void

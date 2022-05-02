@@ -16,6 +16,7 @@
 #include "power_trade/orderbook_listener_impl.hpp"
 #include "power_trade/tick_logger.hpp"
 #include "reactive/fix_connector.hpp"
+#include "ssl_context.hpp"
 #include "trading/market_key.hpp"
 #include "util/monitor.hpp"
 #include "web/entity_detail_app.hpp"
@@ -138,6 +139,14 @@ check(ssl::context &sslctx)
     std::unordered_map< char, sigs::signal< void() > > key_signals;
     sigs::scoped_connection                            qcon0 = key_signals['q'].connect([&] { asioex::terminate(stop_monitor); });
 
+    auto                         svc = entity::entity_service();
+    reactive::fix_connector_args reactive_args { .sender_comp_id      = "POWERTRADE_MD_1",
+                                                 .target_comp_id      = "SWITCHBOARD_DEMO",
+                                                 .socket_connect_host = "fix.demo.switchboard.reactivemarkets.com",
+                                                 .socket_connect_port = "8289",
+                                                 .use_ssl             = true };
+    auto                         reactive1 = svc.locate< reactive::fix_connector >(reactive_args.to_key());
+
     auto reactive = std::make_unique< reactive::fix_connector >(
         this_exec,
         sslctx,
@@ -193,8 +202,9 @@ main(int argc, char **argv)
     using asio::co_spawn;
     using asio::detached;
 
-    asio::io_context ioc;
-    ssl::context     sslctx(ssl::context_base::tls_client);
+    asio::io_context  ioc;
+    asio::thread_pool threadpool(6);
+    ssl::context      sslctx(ssl::context_base::tls_client);
 
     auto arg0 = fs::path(argv[0]);
     progname  = arg0.stem().string();
@@ -202,11 +212,16 @@ main(int argc, char **argv)
     spdlog::set_level(spdlog::level::debug);
     fmt::print("{}: starting\n", progname);
 
+    auto svc = entity::entity_service();
+    svc.add_invariants(ioc.get_executor(), ssl_context(sslctx), threadpool.get_executor());
+    //    svc.add_entity_service(entity::entity_interface_service<trading::aggregate_book, "AggregateBook">());
+
     try
     {
         //        co_spawn(ioc, watch(), detached);
         co_spawn(ioc, check(sslctx), detached);
         ioc.run();
+        threadpool.join();
     }
     catch (const std::exception &e)
     {

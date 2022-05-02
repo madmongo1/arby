@@ -40,13 +40,22 @@ fix_connector_impl::fix_connector_impl(asio::any_io_executor exec, ssl::context 
 {
 }
 
+entity::entity_key
+fix_connector_args::to_key() const
+{
+    auto key = entity::entity_key();
+    key.set("reactive.SenderCompId", sender_comp_id);
+    key.set("reactive.TargetCompId", target_comp_id);
+    key.set("reactive.SocketConnectHost", socket_connect_host);
+    key.set("reactive.SocketConnectPort", socket_connect_port);
+    key.set("reactive.UseSSL", std::to_string(use_ssl));
+    return key;
+}
+
 void
 merge(entity::entity_key &target, const fix_connector_args &args)
 {
-    target.set("reactive.SenderCompId", args.sender_comp_id);
-    target.set("reactive.TargetCompId", args.target_comp_id);
-    target.set("reactive.SocketConnectHost", args.socket_connect_host);
-    target.set("reactive.SocketConnectPort", args.socket_connect_port);
+    target.merge(entity::entity_key(args.to_key()));
 }
 }   // namespace reactive
 }   // namespace arby

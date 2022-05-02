@@ -22,7 +22,7 @@ prepare_fix_connector(entity::invariants invariants, entity::entity_service svc,
 {
     auto args = std::any_cast< fix_connector_args >(arguments);
 
-    auto key = entity::entity_key("reactive::fix_connector");
+    auto key = entity::entity_key();
     merge(key, args);
     key.lock();
 

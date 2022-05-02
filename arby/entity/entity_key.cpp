@@ -17,36 +17,9 @@ namespace arby
 {
 namespace entity
 {
-key_values::key_values(std::shared_ptr< const std::unordered_map< std::string, std::string > > values)
-: values_(std::move(values))
-{
-}
-std::string const &
-key_values::at(const std::string &key) const
-{
-    return values_->at(key);
-}
-bool
-key_values::operator==(const key_values &other) const
-{
-    return values_.get() == other.values_.get();
-}
 
-key_values
-key_values::empty()
-{
-    static values_map const data;
-    static auto const       values = std::shared_ptr< values_map const >(&data, []< class T >(T *) noexcept {});
-    return key_values(values);
-}
-key_values
-mutable_key_values::lock() &&
-{
-    return key_values(std::shared_ptr< std::unordered_map< std::string, std::string > const >(std::move(values_)));
-}
-
-entity_key::entity_key(std::string classname, map_type values)
-: impl_(std::make_shared< impl >(std::move(classname), std::move(values)))
+entity_key::entity_key(map_type values)
+: impl_(std::make_shared< impl >(std::move(values)))
 {
 }
 
@@ -119,11 +92,11 @@ operator<<(std::ostream &os, const entity_key &key)
 {
     if (key.locked())
     {
-        fmt::print(os, "{}:{}", key.impl_->classname, key.impl_->sha1hash);
+        os << key.impl_->sha1hash;
     }
     else
     {
-        fmt::print(os, "[{}-unlocked", key.impl_->classname);
+        fmt::print(os, "[unlocked");
         for (auto &[k, v] : key.impl_->values)
             fmt::print(" [{} {}]", k, v);
         fmt::print(os, "]");
@@ -141,8 +114,8 @@ entity_key::operator==(const entity_key &other) const
     if (impl_.get() == other.impl_.get())
         return true;
 
-    return std::tie(impl_->classname, impl_->cpphash, impl_->sha1hash, impl_->values) ==
-           std::tie(other.impl_->classname, other.impl_->cpphash, other.impl_->sha1hash, other.impl_->values);
+    return std::tie(impl_->cpphash, impl_->sha1hash, impl_->values) ==
+           std::tie(other.impl_->cpphash, other.impl_->sha1hash, other.impl_->values);
 }
 
 bool
@@ -154,8 +127,8 @@ entity_key::operator<(entity_key const &other) const
     if (impl_.get() == other.impl_.get())
         return false;
 
-    return std::tie(impl_->classname, impl_->cpphash, impl_->sha1hash, impl_->values) <
-           std::tie(other.impl_->classname, other.impl_->cpphash, other.impl_->sha1hash, other.impl_->values);
+    return std::tie(impl_->cpphash, impl_->sha1hash, impl_->values) <
+           std::tie(other.impl_->cpphash, other.impl_->sha1hash, other.impl_->values);
 }
 
 std::string const &
