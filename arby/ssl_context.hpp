@@ -7,25 +7,29 @@
 // Official repository: https://github.com/madmongo1/arby
 //
 
-#ifndef ARBY_LIB_ASIOEX_HELPERS_HPP
-#define ARBY_LIB_ASIOEX_HELPERS_HPP
+#ifndef ARBY_ARBY_SSL_CONTEXT_HPP
+#define ARBY_ARBY_SSL_CONTEXT_HPP
 
 #include "config/asio.hpp"
 
 namespace arby
 {
-namespace asioex
+
+struct ssl_context
 {
+    ssl_context(ssl::context &impl)
+    : impl_(&impl)
+    {
+    }
 
-#ifndef NDEBUG
-bool
-on_correct_thread(asio::any_io_executor const &exec);
-#endif
+    operator ssl::context &() const { return *impl_; }
 
-asio::awaitable< void >
-spin();
+    ssl::context& to_context() const { return *impl_; }
 
-}   // namespace asioex
+  private:
+    ssl::context *impl_;
+};
+
 }   // namespace arby
 
-#endif   // ARBY_LIB_ASIOEX_HELPERS_HPP
+#endif   // ARBY_ARBY_SSL_CONTEXT_HPP

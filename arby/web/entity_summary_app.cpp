@@ -12,6 +12,7 @@
 #include "entity/entity_base.hpp"
 
 #include <fmt/format.h>
+#include <fmt/ostream.h>
 
 namespace arby
 {
@@ -58,35 +59,35 @@ struct async_condition_variable
 };
 
 asio::awaitable< bool >
-entity_summary_app::operator()(tcp::socket &stream, http::request< http::string_body > &request, std::cmatch&)
+entity_summary_app::operator()(tcp::socket &stream, http::request< http::string_body > &request, std::cmatch &)
 {
     auto this_exec = co_await asio::this_coro::executor;
 
-    std::multimap< entity::entity_key, std::string > summaries;
-    auto                                             cv          = async_condition_variable(this_exec);
-    int                                              outstanding = 0;
+    auto summaries   = std::map< void *, std::string >();
+    auto cv          = async_condition_variable(this_exec);
+    int  outstanding = 0;
 
-    auto final = [&](entity::entity_key key, std::string result)
+    auto final = [&](void* p, std::string result)
     {
-        summaries.emplace(key, result);
+        summaries.emplace(p, result);
         --outstanding;
         cv.notify_one();
     };
 
-    auto enumerator = [this_exec, final, &summaries](std::shared_ptr< entity::entity_base > p)
+    auto enumerator = [this_exec, final, &summaries](std::shared_ptr< entity::entity_base > const &p)
     {
         if (this_exec == p->get_executor())
         {
-            summaries.emplace(p->key(), p->summary());
+            summaries.emplace(p.get(), p->summary());
         }
         else
         {
             asio::dispatch(asio::bind_executor(p->get_executor(),
-                                               [p, final, this_exec]
+                                               [p, final, this_exec]() mutable
                                                {
                                                    auto result = p->summary();
-                                                   asio::dispatch(
-                                                       asio::bind_executor(this_exec, std::bind(final, p->key(), result)));
+                                                   asio::dispatch(asio::bind_executor(
+                                                       this_exec, std::bind(final, p.get(), result)));
                                                }));
         }
     };
@@ -102,12 +103,10 @@ entity_summary_app::operator()(tcp::socket &stream, http::request< http::string_
     response.result(http::status::ok);
     response.version(request.version());
     response.keep_alive(request.keep_alive());
-    response.body() = fmt::format("{} entities:\r\n", summaries.size());
+    auto &body = response.body();
+    body       = fmt::format("{} entities:\r\n", summaries.size());
     for (auto &[k, buffer] : summaries)
-    {
-        response.body().append(buffer.begin(), buffer.end());
-        response.body() + "\r\n";
-    }
+        body += fmt::format("{} - {}\r\n", k, buffer);
     response.prepare_payload();
     co_await http::async_write(stream, response, use_awaitable);
     co_return !response.need_eof();

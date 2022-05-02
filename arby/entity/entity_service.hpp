@@ -13,6 +13,7 @@
 #include "config/asio.hpp"
 #include "entity/entity_key.hpp"
 
+#include <any>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -23,50 +24,31 @@ namespace arby::entity
 {
 
 struct entity_base;
+struct entity_handle_base;
 
 struct entity_service
 {
     struct impl
     {
-        struct entry
-        {
-            std::weak_ptr< entity_base > weak_impl;
-            int                          version;
-        };
-
-        struct info
-        {
-            std::map< int, std::weak_ptr< entity_base > > weak_;
-            int                                           next_version = 0;
-        };
-
-        std::unordered_map< std::string, info > cache_;
-        std::mutex                              m_;
+        std::unordered_map< entity_key, std::weak_ptr< entity::entity_handle_base > > cache_;
+        std::set< std::weak_ptr< entity_base >, std::owner_less<> >                   impl_cache_;
+        std::mutex                                                                    m_;
 
         asio::awaitable< void >
         summary(std::string &body);
 
-        int
-        notify(entity_key const &key, std::weak_ptr< entity_base > const &weak)
+        void
+        notify_create(std::weak_ptr< entity_base > const &weak)
         {
-            auto  digest     = key.sha1_digest();
-            auto  lock       = std::unique_lock(m_);
-            auto &i          = cache_[digest];
-            auto  version    = i.next_version++;
-            i.weak_[version] = weak;
-            return version;
+            auto lock = std::unique_lock(m_);
+            impl_cache_.insert(weak);
         }
 
         void
-        remove(entity_key const &key, int version)
+        notify_destroy(std::weak_ptr< entity_base > const &weak)
         {
             auto lock = std::unique_lock(m_);
-            if (auto iinfo = cache_.find(key.sha1_digest()); iinfo != cache_.end())
-            {
-                iinfo->second.weak_.erase(version);
-                if (iinfo->second.weak_.empty())
-                    cache_.erase(iinfo);
-            }
+            impl_cache_.erase(weak);
         }
 
         template < class F >
@@ -74,45 +56,11 @@ struct entity_service
         enumerate(F &&f)
         {
             auto lock       = std::unique_lock(m_);
-            auto cache_copy = this->cache_;
+            auto cache_copy = this->impl_cache_;
             lock.unlock();
-            for (auto &[k, info] : cache_copy)
-                for (auto &[version, weak] : info.weak_)
-                    if (auto p = weak.lock())
-                        f(p);
-        }
-
-        std::shared_ptr< entity_base >
-        hash_lookup(std::string const &sha1hash, int version)
-        {
-            std::shared_ptr< entity_base > result;
-
-            auto lock = std::unique_lock(m_);
-
-            if (auto iinfo = cache_.find(sha1hash); iinfo != cache_.end())
-            {
-                if (auto iversion = iinfo->second.weak_.find(version); iversion != iinfo->second.weak_.end())
-                    result = iversion->second.lock();
-            }
-
-            return result;
-        }
-
-        std::vector< std::shared_ptr< entity_base > >
-        hash_lookup(std::string const &sha1hash)
-        {
-            std::vector< std::shared_ptr< entity_base > > result;
-
-            auto lock = std::unique_lock(m_);
-
-            if (auto iinfo = cache_.find(sha1hash); iinfo != cache_.end())
-            {
-                for (auto &[version, weak] : iinfo->second.weak_)
-                    if (auto p = weak.lock())
-                        result.push_back(p);
-            }
-
-            return result;
+            for (auto &weak : cache_copy)
+                if (auto p = weak.lock())
+                    f(p);
         }
     };
 
@@ -131,27 +79,16 @@ struct entity_service
         return get_implementation()->summary(body);
     }
 
-    int
-    notify(entity_key const &key, std::weak_ptr< entity_base > const &weak)
-    {
-        return get_implementation()->notify(key, weak);
-    }
     void
-    remove(entity_key const &key, int version)
+    notify_create(std::weak_ptr< entity_base > const &weak)
     {
-        return get_implementation()->remove(key, version);
+        get_implementation()->notify_create(weak);
     }
 
-    std::shared_ptr< entity_base >
-    hash_lookup(std::string const &sha1hash, int version)
+    void
+    notify_destroy(std::weak_ptr< entity_base > const &weak)
     {
-        return get_implementation()->hash_lookup(sha1hash, version);
-    }
-
-    std::vector< std::shared_ptr< entity_base > >
-    hash_lookup(std::string const &sha1hash)
-    {
-        return get_implementation()->hash_lookup(sha1hash);
+        get_implementation()->notify_destroy(weak);
     }
 
     template < class F >
@@ -159,6 +96,22 @@ struct entity_service
     enumerate(F &&f)
     {
         get_implementation()->enumerate(f);
+    }
+
+    template < class T, class F >
+    std::shared_ptr< T >
+    require(entity_key const &key, F &&f)
+    {
+        auto &&impl      = get_implementation();
+        auto   lock      = std::unique_lock(impl->m_);
+        auto  &weak      = impl->cache_[key];
+        auto   candidate = std::static_pointer_cast< T >(weak.lock());
+        if (!candidate)
+        {
+            candidate = f();
+            weak      = candidate;
+        }
+        return candidate;
     }
 };
 

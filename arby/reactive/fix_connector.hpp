@@ -13,49 +13,22 @@
 #include "config/wise_enum.hpp"
 #include "connection_state.hpp"
 #include "entity/entity_base.hpp"
+#include "reactive/impl/fix_connector_impl.hpp"
 
 namespace arby
 {
 namespace reactive
 {
 
-struct fix_connector_args
+struct fix_connector : entity::entity_handle< fix_connector_impl >
 {
-    std::string sender_comp_id;
-    std::string target_comp_id;
-    std::string socket_connect_host;
-    std::string socket_connect_port;
-    bool        use_ssl;
-};
-
-struct fix_connector_impl : entity::entity_base
-{
-    fix_connector_impl(asio::any_io_executor exec, ssl::context &sslctx, fix_connector_args args, entity::entity_service esvc)
-    : entity::entity_base(exec, esvc)
-    , sslctx_(sslctx)
-    , args_(std::move(args))
+    fix_connector(std::shared_ptr< fix_connector_impl > impl)
+    : entity::entity_handle< fix_connector_impl >(impl)
     {
     }
 
-    std::string_view
-    classname() const override;
-
-  private:
-    void
-    extend_summary(std::string &buffer) const override;
-
-  public:
-    ssl::context &sslctx_;
-
-    fix_connector_args args_;
-
-    connection_state connstate_ = connection_down;
-};
-
-struct fix_connector : entity::entity_handle< fix_connector_impl >
-{
-    fix_connector(asio::any_io_executor exec, ssl::context &sslctx, fix_connector_args args, entity::entity_service esvc = {})
-    : entity::entity_handle< fix_connector_impl >(std::make_shared< fix_connector_impl >(exec, sslctx, std::move(args), esvc))
+    fix_connector(asio::any_io_executor exec, ssl::context &sslctx, fix_connector_args args)
+    : entity::entity_handle< fix_connector_impl >(exec, sslctx, args)
     {
     }
 };

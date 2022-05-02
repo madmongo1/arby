@@ -53,7 +53,9 @@ struct mutable_key_values
 
 struct entity_key
 {
-    explicit entity_key(key_values values = key_values::empty());
+    using map_type = std::map< std::string, std::string >;
+
+    explicit entity_key(std::string classname, map_type values = map_type());
 
     friend std::size_t
     hash_value(entity_key const &key);
@@ -61,8 +63,11 @@ struct entity_key
     void
     lock();
 
-    std::string const &
-    use(std::string const &key);
+    void
+    set(std::string const &key, std::string value)
+    {
+        copy_check()->values[key] = std::move(value);
+    }
 
     void
     merge(entity_key const &other);
@@ -79,12 +84,52 @@ struct entity_key
     friend std::ostream &
     operator<<(std::ostream &os, entity_key const &key);
 
+    bool
+    locked() const
+    {
+        return impl_->locked;
+    }
+
+    struct impl
+    {
+        std::string classname;
+        map_type    values;
+        std::size_t cpphash = 0;
+        std::string sha1hash;
+        bool        locked = false;
+
+        impl
+        clone() const
+        {
+            return impl(classname, values);
+        }
+
+        impl(std::string classname, map_type m = map_type())
+        : classname(std::move(classname))
+        , values(std::move(m))
+        , cpphash(0)
+        , sha1hash()
+        , locked(false)
+        {
+        }
+
+        impl(impl const &other) = delete;
+        impl(impl &&other)      = default;
+
+        impl &
+        operator=(impl const &other) = delete;
+    };
+
   private:
-    key_values              values_;
-    std::set< std::string > used_;
-    std::size_t             cpphash_;
-    std::string             sha1hash_;
-    bool                    locked_ = false;
+    std::shared_ptr< impl > const &
+    copy_check()
+    {
+        if (!impl_.unique())
+            impl_ = std::make_shared< impl >(impl_->clone());
+        return impl_;
+    }
+
+    std::shared_ptr< impl > impl_;
 };
 
 struct unlocked_entity_key

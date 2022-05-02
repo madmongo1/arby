@@ -44,16 +44,17 @@ mutable_key_values::lock() &&
 {
     return key_values(std::shared_ptr< std::unordered_map< std::string, std::string > const >(std::move(values_)));
 }
-entity_key::entity_key(key_values values)
-: values_(std::move(values))
-, used_()
+
+entity_key::entity_key(std::string classname, map_type values)
+: impl_(std::make_shared< impl >(std::move(classname), std::move(values)))
 {
 }
+
 std::size_t
 hash_value(const entity_key &key)
 {
-    assert(key.locked_);
-    return key.cpphash_;
+    assert(key.locked());
+    return key.impl_->cpphash;
 }
 
 namespace
@@ -82,58 +83,49 @@ entity_key::lock()
 {
     using boost::hash_combine;
 
-    assert(!locked_);
-    assert(cpphash_ == 0);
+    assert(locked());
+    assert(impl_->cpphash == 0);
 
     SHA_CTX shactx;
     SHA1_Init(&shactx);
 
-    for (auto &uk : used_)
-    {
-        hash_combine(cpphash_, uk);
-        SHA1_Update(&shactx, uk.data(), uk.size());
+    impl_->cpphash = boost::hash_value(impl_->values);
 
-        auto &v = values_.at(uk);
-        hash_combine(cpphash_, values_.at(uk));
+    for (auto &[k, v] : impl_->values)
+    {
+        SHA1_Update(&shactx, k.data(), k.size());
         SHA1_Update(&shactx, v.data(), v.size());
     }
 
     unsigned char digest[SHA_DIGEST_LENGTH];
     SHA1_Final(digest, &shactx);
-    stringify(sha1hash_, digest);
+    stringify(impl_->sha1hash, digest);
 
-    locked_ = true;
+    impl_->locked = true;
 }
-std::string const &
-entity_key::use(const std::string &key)
-{
-    assert(!locked_);
-    std::string const &value = values_.at(key);
-    used_.insert(key);
-    return value;
-}
+
 void
 entity_key::merge(const entity_key &other)
 {
-    assert(!locked_);
-    assert(other.locked_);
-    assert(values_ == other.values_);
-    for (auto &&k : other.used_)
-        used_.insert(k);
+    assert(!locked());
+    auto &target = copy_check()->values;
+    for (auto &[k, v] : other.impl_->values)
+        // note: merged values will not overwrite existing values
+        target.emplace(k, v);
 }
 
 std::ostream &
 operator<<(std::ostream &os, const entity_key &key)
 {
-    if (key.locked_)
+    if (key.locked())
     {
-        os << key.sha1hash_;
+        fmt::print(os, "{}:{}", key.impl_->classname, key.impl_->sha1hash);
     }
     else
     {
-        fmt::print(os, "[unlocked");
-        for (auto &&k : key.used_)
-            fmt::print(" [{} {}]", k, key.values_.at(k));
+        fmt::print(os, "[{}-unlocked", key.impl_->classname);
+        for (auto &[k, v] : key.impl_->values)
+            fmt::print(" [{} {}]", k, v);
         fmt::print(os, "]");
     }
 
@@ -143,41 +135,34 @@ operator<<(std::ostream &os, const entity_key &key)
 bool
 entity_key::operator==(const entity_key &other) const
 {
-    assert(locked_);
-    assert(other.locked_);
+    assert(locked());
+    assert(other.locked());
 
-    if (cpphash_ != other.cpphash_)
-        return false;
-    if (used_ != other.used_)
-        return false;
-    for (auto &&k : used_)
-        if (values_.at(k) != other.values_.at(k))
-            return false;
+    if (impl_.get() == other.impl_.get())
+        return true;
 
-    return true;
+    return std::tie(impl_->classname, impl_->cpphash, impl_->sha1hash, impl_->values) ==
+           std::tie(other.impl_->classname, other.impl_->cpphash, other.impl_->sha1hash, other.impl_->values);
 }
 
 bool
 entity_key::operator<(entity_key const &other) const
 {
-    assert(locked_);
-    assert(other.locked_);
+    assert(locked());
+    assert(other.locked());
 
-    if (!(used_ < other.used_))
+    if (impl_.get() == other.impl_.get())
         return false;
 
-    for (auto &&k : used_)
-        if (!(values_.at(k) < other.values_.at(k)))
-            return false;
-
-    return true;
+    return std::tie(impl_->classname, impl_->cpphash, impl_->sha1hash, impl_->values) <
+           std::tie(other.impl_->classname, other.impl_->cpphash, other.impl_->sha1hash, other.impl_->values);
 }
 
 std::string const &
 entity_key::sha1_digest() const
 {
-    assert(locked_);
-    return sha1hash_;
+    assert(locked());
+    return impl_->sha1hash;
 }
 
 }   // namespace entity

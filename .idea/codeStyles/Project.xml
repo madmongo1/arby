@@ -49,12 +49,5 @@
     <clangFormatSettings>
       <option name="ENABLED" value="true" />
     </clangFormatSettings>
-    <files>
-      <extensions>
-        <pair source="cpp" header="hpp" fileNamingConvention="SNAKE_CASE" />
-        <pair source="c" header="h" fileNamingConvention="SNAKE_CASE" />
-        <pair source="cu" header="cuh" fileNamingConvention="NONE" />
-      </extensions>
-    </files>
   </code_scheme>
 </component>

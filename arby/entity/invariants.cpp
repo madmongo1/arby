@@ -7,11 +7,11 @@
 // Official repository: https://github.com/madmongo1/arby
 //
 
-#include "fix_connector.hpp"
+#include "invariants.hpp"
 
 namespace arby
 {
-namespace reactive
+namespace entity
 {
-}   // namespace reactive
+}   // namespace entity
 }   // namespace arby

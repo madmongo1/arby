@@ -20,7 +20,8 @@ namespace entity
 {
 struct entity_base : std::enable_shared_from_this< entity_base >
 {
-    WISE_ENUM_MEMBER(entity_state, not_started, prepared, started, stopped)
+    WISE_ENUM_MEMBER(entity_state, not_started, started, stopped)
+
     template < class Stream >
     friend decltype(auto)
     operator<<(Stream &os, entity_state es)
@@ -31,10 +32,7 @@ struct entity_base : std::enable_shared_from_this< entity_base >
     virtual std::string_view
     classname() const;
 
-    entity_base(asio::any_io_executor exec, entity_service entity_svc);
-
-    void
-    prepare();
+    entity_base(asio::any_io_executor exec);
 
     void
     start();
@@ -53,15 +51,9 @@ struct entity_base : std::enable_shared_from_this< entity_base >
     asio::any_io_executor const &
     get_executor() const;
 
-    entity_key const &
-    key() const;
-
   private:
     virtual void
     extend_summary(std::string &buffer) const;
-
-    virtual void
-    do_prepare() {};
 
     virtual void
     handle_start() {};
@@ -70,10 +62,7 @@ struct entity_base : std::enable_shared_from_this< entity_base >
     handle_stop() {};
 
     asio::any_io_executor exec_;
-    entity_service        entity_svc_;
-    entity_key            key_;
-    int                   entity_version_ = -1;
-    entity_state          estate_         = not_started;
+    entity_state          estate_ = not_started;
 };
 
 template < class T >
@@ -81,27 +70,38 @@ concept is_entity_impl = std::is_base_of_v< entity_base, T >;
 
 struct entity_handle_base
 {
+    virtual asio::awaitable< std::string >
+    summary() const = 0;
+
+    virtual asio::any_io_executor
+    get_executor() const = 0;
+
     virtual ~entity_handle_base() = default;
 };
 
 template < is_entity_impl T >
-struct entity_handle
+struct entity_handle : entity_handle_base
 {
-    template < class... Args >
-    static auto
-    create(Args &&...args) -> entity_handle;
+    using implementation_class = T;
+    using implementation_type  = std::shared_ptr< implementation_class >;
 
     template < class U >
         requires std::is_base_of_v< T, U >
     entity_handle(std::shared_ptr< U > impl)
     : impl_(impl)
     {
-        impl_->prepare();
-        impl_->start();
     }
 
+    template < class... Args >
+    entity_handle(asio::any_io_executor exec, Args &&...args)
+    : impl_(construct(exec, std::forward<Args>(args)...))
+    {
+    }
+
+    asio::any_io_executor
+    get_executor() const override;
     asio::awaitable< std::string >
-    summary() const
+    summary() const override
     {
         using asio::awaitable;
         using asio::co_spawn;
@@ -125,7 +125,8 @@ struct entity_handle
     {
     }
 
-    entity_handle& operator=(entity_handle &&other)
+    entity_handle &
+    operator=(entity_handle &&other)
     {
         if (&other != this)
         {
@@ -138,6 +139,10 @@ struct entity_handle
     ~entity_handle() { stop_check(); }
 
   private:
+    template < class... Args >
+    static auto
+    construct(Args &&...args) -> std::shared_ptr< T >;
+
     void
     stop_check()
     {
@@ -156,11 +161,28 @@ struct entity_handle
 template < is_entity_impl T >
 template < class... Args >
 auto
-entity_handle< T >::create(Args &&...args) -> entity_handle< T >
+entity_handle< T >::construct(Args &&...args) -> std::shared_ptr< T >
 {
-    auto impl = std::make_shared< T >(std::forward< Args >(args)...);
+    auto                 uimpl = std::make_unique< T >(std::forward< Args >(args)...);
+    std::shared_ptr< T > impl { uimpl.release(),
+                                [](T *p)
+                                {
+                                    auto w   = p->weak_from_this();
+                                    auto svc = entity::entity_service();
+                                    svc.notify_destroy(w);
+                                    delete p;
+                                } };
+    auto svc = entity::entity_service();
+    svc.notify_create(impl);
     impl->start();
-    return entity_handle(impl);
+    return impl;
+}
+
+template < is_entity_impl T >
+asio::any_io_executor
+entity_handle< T >::get_executor() const
+{
+    return impl_->get_executor();
 }
 
 }   // namespace entity

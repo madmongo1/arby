@@ -28,5 +28,13 @@ on_correct_thread(asio::any_io_executor const &exec)
     assert(!"unsupported executor type");
     return false;
 }
+
+asio::awaitable< void >
+spin()
+{
+    error_code ec;
+    auto       t = asio::steady_timer(co_await asio::this_coro::executor, asio::steady_timer::time_point::max());
+    co_await t.async_wait(asio::redirect_error(asio::use_awaitable, ec));
+}
 }   // namespace asioex
 }   // namespace arby

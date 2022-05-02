@@ -93,6 +93,7 @@ to_sha1_digest(std::string const &s)
 asio::awaitable< bool >
 entity_detail_app::operator()(tcp::socket &stream, http::request< http::string_body > &request, std::cmatch &match)
 {
+    /*
     auto candidates = std::vector< std::shared_ptr< entity::entity_base > >();
     auto sha_key    = match[1].str();
     boost::algorithm::to_lower(sha_key);
@@ -104,7 +105,7 @@ entity_detail_app::operator()(tcp::socket &stream, http::request< http::string_b
     }
     else
         candidates = entity_service_.hash_lookup(sha_key);
-
+*/
     co_return false;
 }
 }   // namespace web
