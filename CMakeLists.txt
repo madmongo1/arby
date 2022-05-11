@@ -59,3 +59,4 @@ enable_testing()
 
 add_subdirectory(lib)
 add_subdirectory(arby)
+add_subdirectory(scratch)

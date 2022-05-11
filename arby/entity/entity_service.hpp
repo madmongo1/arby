@@ -31,8 +31,10 @@ struct entity_handle_base;
 
 struct entity_service;
 
-struct entity_interface_service_base
+struct service_base
 {
+    virtual ~service_base() = default;
+
     virtual std::string const &
     classname() const = 0;
 
@@ -45,7 +47,7 @@ struct entity_interface_service_base
 };
 
 template < std::derived_from< entity_handle_base > Interface, const char *ClassName >
-struct entity_interface_service : entity_interface_service_base
+struct basic_service : service_base
 {
     std::string const &
     classname() const override
@@ -78,11 +80,13 @@ struct entity_service
 {
     struct impl
     {
-        std::unordered_map< std::type_index, std::unique_ptr< entity_interface_service_base > > interface_services;
+        std::unordered_map< std::type_index, std::unique_ptr< service_base > > interface_services;
         entity::invariants                                                                      invariants_;
         std::unordered_map< entity_key, std::weak_ptr< entity::entity_handle_base > >           cache_;
         std::set< std::weak_ptr< entity_base >, std::owner_less<> >                             impl_cache_;
         std::mutex                                                                              m_;
+
+        virtual ~impl() = default;
 
         asio::awaitable< void >
         summary(std::string &body);
@@ -190,13 +194,22 @@ struct entity_service
     /// @return a shared pointer containing the entity handle
     template < std::derived_from< entity::entity_handle_base > T >
     std::shared_ptr< T >
-    locate(entity::entity_key key = {})
+    locate(std::any arg = std::any())
     {
+        /*
         auto &&impl = get_implementation();
         auto &&type = typeid(T);
+        auto& svc = impl->require_service(typeid(T));
+        auto [key, handle] = svc->construct(*this, std::move(arg));
+*/
         //        auto  &service = impl->services_.at(typeid(T));
         return std::shared_ptr< T >();
     }
+};
+
+struct config_service
+{
+//    std::shared_ptr<entity_handle_base> construct(entity_service svc, )
 };
 
 }   // namespace arby::entity

@@ -10,6 +10,7 @@
 #include "asioex/async_semaphore.hpp"
 #include "asioex/scoped_interrupt.hpp"
 #include "config/websocket.hpp"
+#include "configuration.hpp"
 #include "power_trade/connector.hpp"
 #include "power_trade/event_listener.hpp"
 #include "power_trade/native_symbol.hpp"
@@ -126,6 +127,7 @@ monitor_keys(std::unordered_map< char, sigs::signal< void() > > &signals)
     }
 }
 
+
 asio::awaitable< void >
 check(ssl::context &sslctx)
 {
@@ -146,6 +148,8 @@ check(ssl::context &sslctx)
                                                  .socket_connect_port = "8289",
                                                  .use_ssl             = true };
     auto                         reactive1 = svc.locate< reactive::fix_connector >(reactive_args.to_key());
+
+    auto cfg = svc.locate< configuration >();
 
     auto reactive = std::make_unique< reactive::fix_connector >(
         this_exec,

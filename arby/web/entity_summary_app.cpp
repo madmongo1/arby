@@ -9,6 +9,7 @@
 
 #include "entity_summary_app.hpp"
 
+#include "asioex/async_condition_variable.hpp"
 #include "entity/entity_base.hpp"
 
 #include <fmt/format.h>
@@ -18,45 +19,6 @@ namespace arby
 {
 namespace web
 {
-struct async_condition_variable
-{
-    using executor_type = asio::any_io_executor;
-
-    async_condition_variable(executor_type exec)
-    : exec_(exec)
-    {
-    }
-
-    executor_type const &
-    get_executor() const
-    {
-        return exec_;
-    }
-
-    asio::awaitable< void >
-    wait()
-    {
-        error_code ec;
-        co_await timer_.async_wait(asio::redirect_error(asio::use_awaitable, ec));
-        if (asio::cancellation_state cstate = co_await asio::this_coro::cancellation_state;
-            cstate.cancelled() == asio::cancellation_type::none)
-            ec.clear();
-        else
-            ec = asio::error::operation_aborted;
-        if (ec)
-            throw system_error(ec);
-    }
-
-    void
-    notify_one()
-    {
-        timer_.cancel_one();
-    }
-
-  private:
-    executor_type      exec_;
-    asio::steady_timer timer_ { get_executor(), asio::steady_timer ::time_point ::max() };
-};
 
 asio::awaitable< bool >
 entity_summary_app::operator()(tcp::socket &stream, http::request< http::string_body > &request, std::cmatch &)
@@ -64,10 +26,10 @@ entity_summary_app::operator()(tcp::socket &stream, http::request< http::string_
     auto this_exec = co_await asio::this_coro::executor;
 
     auto summaries   = std::map< void *, std::string >();
-    auto cv          = async_condition_variable(this_exec);
+    auto cv          = asioex::async_condition_variable(this_exec);
     int  outstanding = 0;
 
-    auto final = [&](void* p, std::string result)
+    auto final = [&](void *p, std::string result)
     {
         summaries.emplace(p, result);
         --outstanding;
@@ -86,8 +48,8 @@ entity_summary_app::operator()(tcp::socket &stream, http::request< http::string_
                                                [p, final, this_exec]() mutable
                                                {
                                                    auto result = p->summary();
-                                                   asio::dispatch(asio::bind_executor(
-                                                       this_exec, std::bind(final, p.get(), result)));
+                                                   asio::dispatch(
+                                                       asio::bind_executor(this_exec, std::bind(final, p.get(), result)));
                                                }));
         }
     };

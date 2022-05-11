@@ -273,7 +273,8 @@ struct connector_impl
     ssl::context &ssl_ctx_;
 
     // parameters
-    std::string const host_ = "35.186.148.56", port_ = "4321", path_ = "/";
+//    std::string const host_ = "35.186.148.56", port_ = "4321", path_ = "/";
+    std::string const host_ = "proxy.prod.powertrade.dev", port_="4321", path_="/";
 
     struct sv_comp_equ
     : boost::hash< boost::string_view >

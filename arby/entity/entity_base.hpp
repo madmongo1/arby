@@ -18,7 +18,39 @@ namespace arby
 {
 namespace entity
 {
-struct entity_base : std::enable_shared_from_this< entity_base >
+template < class T >
+struct enable_shared_from_that : std::enable_shared_from_this< T >
+{
+    template < std::derived_from< T > U >
+    static std::shared_ptr< U >
+    shared_from_that(U *that)
+    {
+        return std::static_pointer_cast< U >(that->shared_from_this());
+    }
+
+    template < std::derived_from< T > U >
+    static std::shared_ptr< U >
+    shared_from_that(U const *that)
+    {
+        return std::static_pointer_cast< U const >(that->shared_from_this());
+    }
+
+    template < std::derived_from< T > U >
+    static std::weak_ptr< U >
+    weak_from_that(U *that)
+    {
+        return std::static_pointer_cast< U >(that->weak_from_this());
+    }
+
+    template < std::derived_from< T > U >
+    static std::weak_ptr< U >
+    shared_from_that(U const *that)
+    {
+        return std::static_pointer_cast< U const >(that->weak_from_this());
+    }
+};
+
+struct entity_base : enable_shared_from_that< entity_base >
 {
     WISE_ENUM_MEMBER(entity_state, not_started, started, stopped)
 
@@ -34,9 +66,12 @@ struct entity_base : std::enable_shared_from_this< entity_base >
 
     entity_base(asio::any_io_executor exec);
 
+    ///
+    /// @note runs on the executor of the creator. Part of the construction cycle
     void
     start();
 
+    /// @note must be called on the entity's executor
     void
     stop();
 
@@ -94,7 +129,7 @@ struct entity_handle : entity_handle_base
 
     template < class... Args >
     entity_handle(asio::any_io_executor exec, Args &&...args)
-    : impl_(construct(exec, std::forward<Args>(args)...))
+    : impl_(construct(exec, std::forward< Args >(args)...))
     {
     }
 
